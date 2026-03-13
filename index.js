@@ -110,4 +110,20 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// Generisk proxy for testverktøy – aksepterer vilkårlig system/model/messages
+app.post('/api/proxy', async (req, res) => {
+  try {
+    const { system, messages, model, max_tokens } = req.body;
+    const response = await client.messages.create({
+      model: model || 'claude-sonnet-4-6',
+      max_tokens: max_tokens || 1000,
+      system,
+      messages
+    });
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log('Server kjører på port 3000'));
