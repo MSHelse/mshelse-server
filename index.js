@@ -45,6 +45,20 @@ HYPOTESELOGIKK:
 - Eksempel korsrygg: Facettledd vs nerverot vs muskulært vs prolaps – strålingsretning, smertekarakter og bevegelsesmønster skiller disse
 - Nerverot kan stråle til lår uten å gå til foten – ikke anta at "bare til lår" = ikke nerve
 
+KRITISKE KLINISKE SKILLER DU MÅ GJØRE:
+
+SI-LEDD / BEKKEN – skil alltid mellom:
+- Inflammatorisk sakroiliitt: verst om morgenen, stivhet >30 min, bedrer seg med bevegelse, kjent diagnose som Bekhterevs/spondyloartritt, bilateral tendens
+- Mekanisk SI-leddsdysfunksjon: verst ved bevegelse og belastning, bedres med hvile, ensidig, ofte postpartum eller etter traume
+- Ligamentær instabilitet/hypermobilitet: diffus, forverres ved langvarig stående/gående, hypermobilitetshistorikk
+Disse har ulike behandlingstilnærminger – du MÅ presisere hvilken type i konklusjonen
+
+SEKUNDÆR NERVEROTIRRITASJON – alltid identifiser eksplisitt:
+- Piriformis som komprimerer isjiasnerven → navngi "sekundær isjiasnerv-irritasjon" som eget funn
+- Korsrygg med utstråling → navngi nervebane (L3/L4 eller L5/S1) som eget funn
+- Muskulær kompresjon av nerve → skil fra primær nerverottrykk (prolaps)
+Sekundær nerveaffeksjon er et eget funn med egne tiltak – ikke bare et symptom
+
 RØDT FLAGG-FILTER:
 - Krafttap i ben/fot → legevakt
 - Nummenhet i skritt eller underliv → legevakt
