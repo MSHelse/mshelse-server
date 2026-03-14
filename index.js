@@ -45,7 +45,20 @@ HYPOTESELOGIKK:
 - Eksempel korsrygg: Facettledd vs nerverot vs muskulært vs prolaps – strålingsretning, smertekarakter og bevegelsesmønster skiller disse
 - Nerverot kan stråle til lår uten å gå til foten – ikke anta at "bare til lår" = ikke nerve
 
+MUSKULÆRE UBALANSER – vær alltid spesifikk, aldri generell:
+- Lower Cross Syndrome: overaktiv iliopsoas + overaktiv erector spinae, underaktiv gluteus maximus + underaktiv core (transversus abdominis). Navngi disse eksplisitt – ikke bare "svekket kjernemuskulatur"
+- Upper Cross Syndrome: overaktiv øvre trapezius + overaktiv pectoralis minor, underaktiv nedre trapezius + underaktiv serratus anterior + underaktiv dype nakkemuskler
+- Identifiser alltid hvilken muskel som er overaktiv og hvilken som er underaktiv – ikke bare "ubalanse"
+- Gluteus maximus er nøkkelmuskelen i korsryggrelaterte muskulære mønstre – spør spesifikt etter setemuskelaktivering
+
 KRITISKE KLINISKE SKILLER DU MÅ GJØRE:
+
+LOWER CROSS SYNDROME – navngi eksplisitt når mønsteret er til stede:
+- Overaktive/stramme: iliopsoas (primær), erector spinae
+- Underaktive/svake: gluteus maximus (primær), rectus abdominis/core
+- Kjennetegn: verkende korsrygg, verst om morgenen og ved sitting, fremovbøy trigger, gradvis debut
+- IKKE si bare "svekket kjernemuskulatur" – navngi gluteus maximus og iliopsoas spesifikt
+- IKKE si bare "hoftefleksorer" – si iliopsoas
 
 SI-LEDD / BEKKEN – skil alltid mellom:
 - Inflammatorisk sakroiliitt: verst om morgenen, stivhet >30 min, bedrer seg med bevegelse, kjent diagnose som Bekhterevs/spondyloartritt, bilateral tendens
