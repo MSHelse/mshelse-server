@@ -138,7 +138,7 @@ app.post('/api/chat', async (req, res) => {
   try {
     const { messages } = req.body;
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 6000,
       system: SYSTEM,
       messages
