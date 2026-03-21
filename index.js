@@ -241,4 +241,112 @@ program_hint brukes av AI til å generere neste program:
 });
 
 
+app.post('/api/generer-program', async (req, res) => {
+  try {
+    const { reassessment, forrigeAssessment, fraAssessment, ovelser } = req.body;
+
+    if (!ovelser || ovelser.length === 0) {
+      return res.status(400).json({ error: 'Ingen øvelser i biblioteket' });
+    }
+
+    const GENERER_SYSTEM = `Du er en klinisk rehabiliteringsspesialist med 30 års erfaring. Du setter sammen treningsprogrammer basert på klinisk vurdering og tilgjengelige øvelser.
+
+REGLER:
+- Velg KUN øvelser fra listen som er sendt deg – ikke finn på egne
+- Match øvelser til akt og klinisk fokus
+- Velg riktig formål (purpose) per øvelse basert på klinisk kontekst
+- Akt 1: deaktivering/mobilisering + lavterskel aktivering, 2-4 uker
+- Akt 2: aktivering med progresjon, stabilitet, 3-6 uker
+- Akt 3: progressiv styrke og utholdenhet, 4-8 uker
+- Antall øvelser: Akt 1: 3-5, Akt 2: 4-6, Akt 3: 5-7
+- Sett: Akt 1: 2-3, Akt 2: 3-4, Akt 3: 3-5
+- Reps: tilpass til tracking-type og akt
+- Treningsdager: 2-4 per uke avhengig av akt
+- Bruk norsk bokmål
+
+RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
+{
+  "tittel": "kort beskrivende tittel maks 6 ord",
+  "akt": 1,
+  "uker": 4,
+  "dager": ["Man", "Ons", "Fre"],
+  "ovelser": [
+    {
+      "exerciseId": "id fra biblioteket",
+      "navn": "navn fra biblioteket",
+      "purposeId": "id fra øvelsens purposes",
+      "formaalLabel": "label fra purpose",
+      "instruksjon": "instruksjon fra purpose",
+      "tracking_types": ["fra purpose"],
+      "tracking_type": "første tracking type",
+      "sets": 3,
+      "reps": 10,
+      "hold": null,
+      "tempo": null
+    }
+  ]
+}`;
+
+    const ovelserKompakt = ovelser.map((o) => ({
+      id: o.id,
+      name: o.name,
+      bodyParts: o.bodyParts || [],
+      act: o.act || [],
+      purposes: (o.purposes || []).map((p) => ({
+        id: p.id,
+        label: p.label,
+        instruction: p.instruction,
+        tracking_types: p.tracking_types || (p.tracking_type ? [p.tracking_type] : ['completed']),
+        kliniskNotat: p.kliniskNotat || '',
+      })),
+    }));
+
+    // Bygg kontekst avhengig av om det er første kartlegging eller reassessment
+    let prompt;
+    if (reassessment) {
+      prompt = `FORRIGE KARTLEGGING:
+Tittel: ${forrigeAssessment?.tittel || '–'}
+Funn: ${forrigeAssessment?.findings?.[0]?.body || '–'}
+Mål: ${forrigeAssessment?.triage?.goal || '–'}
+
+STATUSSJEKK KONKLUSJON:
+Konklusjon: ${reassessment.konklusjon || '–'}
+Akt: ${reassessment.akt || 1}
+Begrunnelse: ${reassessment.begrunnelse || '–'}
+Fokus neste program: ${reassessment.program_hint?.fokus || '–'}
+Prioriter: ${(reassessment.program_hint?.prioriter || []).join(', ')}
+Unngå: ${(reassessment.program_hint?.unngå || []).join(', ')}`;
+    } else {
+      prompt = `KARTLEGGING:
+Tittel: ${fraAssessment?.tittel || '–'}
+Funn: ${(fraAssessment?.findings || []).map((f) => f.body).join(' ') || '–'}
+Mål: ${fraAssessment?.triage?.goal || '–'}
+Smertenivå: ${fraAssessment?.triage?.pain_level ?? '–'}/10
+Akt: ${fraAssessment?.triage?.start_act || 1}
+Neste steg: ${fraAssessment?.triage?.next_step || '–'}`;
+    }
+
+    prompt += `\n\nTILGJENGELIGE ØVELSER:\n${JSON.stringify(ovelserKompakt, null, 2)}\n\nSett sammen et program basert på konteksten og øvelsene over.`;
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      system: GENERER_SYSTEM,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const tekst = response.content?.[0]?.text || '';
+    const jsonStart = tekst.indexOf('{');
+    const jsonEnd = tekst.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) {
+      return res.status(500).json({ error: 'Ugyldig svar fra AI' });
+    }
+    const program = JSON.parse(tekst.substring(jsonStart, jsonEnd + 1));
+    res.json(program);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 app.listen(3000, () => console.log('Server kjorer pa port 3000'));
