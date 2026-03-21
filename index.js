@@ -317,9 +317,10 @@ Fokus neste program: ${reassessment.program_hint?.fokus || '–'}
 Prioriter: ${(reassessment.program_hint?.prioriter || []).join(', ')}
 Unngå: ${(reassessment.program_hint?.unngå || []).join(', ')}`;
     } else {
+      const funn = fraAssessment?.findings || fraAssessment?.funn || [];
       prompt = `KARTLEGGING:
-Tittel: ${fraAssessment?.tittel || '–'}
-Funn: ${(fraAssessment?.findings || []).map((f) => f.body).join(' ') || '–'}
+Tittel: ${fraAssessment?.tittel || fraAssessment?.title || '–'}
+Funn: ${funn.map((f: any) => f.body).join(' ') || '–'}
 Mål: ${fraAssessment?.triage?.goal || '–'}
 Smertenivå: ${fraAssessment?.triage?.pain_level ?? '–'}/10
 Akt: ${fraAssessment?.triage?.start_act || 1}
