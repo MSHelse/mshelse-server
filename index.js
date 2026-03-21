@@ -183,4 +183,62 @@ app.post('/api/proxy', async (req, res) => {
   }
 });
 
+app.post('/api/reassessment', async (req, res) => {
+  try {
+    const { messages, trackingData, forrigeAssessment } = req.body;
+
+    const REASSESSMENT_SYSTEM = `Du er en klinisk oppfølger for MS Helse-appen. Du har 30 års erfaring som fysioterapeut og manuellterapeut.
+
+KONTEKST DU HAR TILGJENGELIG:
+Du har fått forrige assessment og tracking-data fra programmet. Bruk dette aktivt – du trenger ikke kartlegge det som allerede er kjent. Du kartlegger kun det som har endret seg.
+
+DIN OPPGAVE:
+Gjennomfør en kort, målrettet statussjekk. Still 4–7 spørsmål. Konkluder med anbefalt neste steg.
+
+REGLER:
+- ALDRI gjenta spørsmål som allerede er besvart av tracking-data eller forrige assessment
+- Still kun spørsmål som faktisk endrer konklusjonen
+- Vær direkte – brukeren er ikke ny, de har jobbet med dette en stund
+- Alltid norsk bokmål
+- Alltid inkluder "Annet – beskriv selv" som siste alternativ
+
+MULIGE KONKLUSJONER:
+1. neste_akt – klar for neste akt, generer nytt program
+2. intensiver – same akt men øk vanskelighetsgrad, generer nytt program
+3. fortsett – programmet fungerer, fullfør det
+4. ny_kartlegging – bildet er uklart, full ny kartlegging anbefales
+
+RESPONSFORMAT – kun gyldig JSON:
+{"question":"","sublabel":"","options":[],"progress":20,"done":false}
+
+Når du er sikker på konklusjon:
+{"done":true,"reassessment":{"konklusjon":"neste_akt","akt":2,"begrunnelse":"","neste_steg":"","program_hint":{"fokus":"","prioriter":[],"unngå":[]}}}
+
+program_hint brukes av AI til å generere neste program:
+- fokus: kort beskrivelse av hva neste program skal vektlegge
+- prioriter: liste med treningstyper eller muskler å prioritere
+- unngå: liste med det som ikke er aktuelt ennå`;
+
+    const contextMessage = {
+      role: 'user',
+      content: `FORRIGE ASSESSMENT:\nTittel: ${forrigeAssessment?.tittel || '–'}\nAkt: ${forrigeAssessment?.triage?.start_act || '–'}\nSmertenivå ved start: ${forrigeAssessment?.triage?.pain_level ?? '–'}/10\nMål: ${forrigeAssessment?.triage?.goal || '–'}\nNeste steg anbefalt: ${forrigeAssessment?.triage?.next_step || '–'}\n\nTRACKING-DATA FRA PROGRAMMET:\n${JSON.stringify(trackingData, null, 2)}\n\nStart statussjekken nå.`
+    };
+
+    const alleMessages = messages.length === 0
+      ? [contextMessage]
+      : messages;
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      system: REASSESSMENT_SYSTEM,
+      messages: alleMessages
+    });
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 app.listen(3000, () => console.log('Server kjorer pa port 3000'));
