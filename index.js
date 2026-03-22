@@ -224,9 +224,10 @@ program_hint brukes av AI til å generere neste program:
       content: `FORRIGE ASSESSMENT:\nTittel: ${forrigeAssessment?.tittel || '–'}\nAkt: ${forrigeAssessment?.triage?.start_act || '–'}\nSmertenivå ved start: ${forrigeAssessment?.triage?.pain_level ?? '–'}/10\nMål: ${forrigeAssessment?.triage?.goal || '–'}\nNeste steg anbefalt: ${forrigeAssessment?.triage?.next_step || '–'}\n\nTRACKING-DATA FRA PROGRAMMET:\n${JSON.stringify(trackingData, null, 2)}\n\nStart statussjekken nå.`
     };
 
-    const alleMessages = messages.length === 0
+    const msgs = messages || [];
+    const alleMessages = msgs.length === 0
       ? [contextMessage]
-      : messages;
+      : msgs;
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
