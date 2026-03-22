@@ -321,7 +321,7 @@ Unngå: ${(reassessment.program_hint?.unngå || []).join(', ')}`;
       const funn = fraAssessment?.findings || fraAssessment?.funn || [];
       prompt = `KARTLEGGING:
 Tittel: ${fraAssessment?.tittel || fraAssessment?.title || '–'}
-Funn: ${funn.map((f: any) => f.body).join(' ') || '–'}
+Funn: ${funn.map((f) => f.body).join(' ') || '–'}
 Mål: ${fraAssessment?.triage?.goal || '–'}
 Smertenivå: ${fraAssessment?.triage?.pain_level ?? '–'}/10
 Akt: ${fraAssessment?.triage?.start_act || 1}
