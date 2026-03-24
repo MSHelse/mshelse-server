@@ -265,6 +265,14 @@ REGLER:
 - Treningsdager: 2-4 per uke avhengig av akt
 - Bruk norsk bokmål
 
+PERSONLIG KONTEKST PER ØVELSE:
+For hver øvelse skal du skrive en kort personlig kontekst (1-3 setninger) som forklarer:
+1. Hvorfor akkurat denne øvelsen er valgt for denne brukeren basert på funnene
+2. Hva brukeren spesifikt bør fokusere på eller passe på gitt deres kompensasjonsmønstre
+3. Eventuelt hva de ikke skal gjøre basert på det vi vet om dem
+Konteksten skal føles som om en kliniker snakker direkte til brukeren – ikke generisk instruksjon.
+Eksempel: "For deg spesielt er dette valgt fordi kartleggingen viste at du kompenserer med korsrygg ved hoftefleksjon. Fokuser på å holde korsryggen nøytral og kjenn at hoftefleksorene jobber isolert – stopp settet hvis du kjenner spenning i ryggen."
+
 RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
 {
   "tittel": "kort beskrivende tittel maks 6 ord",
@@ -278,6 +286,7 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
       "purposeId": "id fra øvelsens purposes",
       "formaalLabel": "label fra purpose",
       "instruksjon": "instruksjon fra purpose",
+      "personligKontekst": "1-3 setninger tilpasset denne brukerens spesifikke funn og kompensasjonsmønstre",
       "tracking_types": ["fra purpose"],
       "tracking_type": "første tracking type",
       "sets": 3,
@@ -305,23 +314,32 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
     // Bygg kontekst avhengig av om det er første kartlegging eller reassessment
     let prompt;
     if (reassessment) {
+      const kandidater = (forrigeAssessment?.kandidater || []).map((k) => `${k.label}: ${k.reasoning || ''}`).join('\n');
+      const funn = (forrigeAssessment?.funn || forrigeAssessment?.findings || []).map((f) => f.body || '').filter(Boolean).join('\n');
       prompt = `FORRIGE KARTLEGGING:
 Tittel: ${forrigeAssessment?.tittel || '–'}
-Funn: ${forrigeAssessment?.findings?.[0]?.body || '–'}
+Vurdering: ${kandidater || '–'}
+Kliniske funn: ${funn || '–'}
 Mål: ${forrigeAssessment?.triage?.goal || '–'}
+Bekreftende funn: ${forrigeAssessment?.bekreftende?.body || '–'}
 
 STATUSSJEKK KONKLUSJON:
 Konklusjon: ${reassessment.konklusjon || '–'}
 Akt: ${reassessment.akt || 1}
 Begrunnelse: ${reassessment.begrunnelse || '–'}
+Neste steg: ${reassessment.neste_steg || '–'}
 Fokus neste program: ${reassessment.program_hint?.fokus || '–'}
 Prioriter: ${(reassessment.program_hint?.prioriter || []).join(', ')}
 Unngå: ${(reassessment.program_hint?.unngå || []).join(', ')}`;
     } else {
       const funn = fraAssessment?.findings || fraAssessment?.funn || [];
+      const kandidater = (fraAssessment?.kandidater || fraAssessment?.candidates || []).map((k) => `${k.label || ''}: ${k.reasoning || ''}`).filter(Boolean).join('\n');
       prompt = `KARTLEGGING:
 Tittel: ${fraAssessment?.tittel || fraAssessment?.title || '–'}
-Funn: ${funn.map((f) => f.body).join(' ') || '–'}
+Primær vurdering: ${kandidater || '–'}
+Kliniske funn: ${funn.map((f) => f.body || '').filter(Boolean).join('\n') || '–'}
+Livsstil/bakgrunn: ${fraAssessment?.livsstil?.body || fraAssessment?.lifestyle?.body || '–'}
+Bekreftende funn: ${fraAssessment?.bekreftende?.body || fraAssessment?.confirmatory?.body || '–'}
 Mål: ${fraAssessment?.triage?.goal || '–'}
 Smertenivå: ${fraAssessment?.triage?.pain_level ?? '–'}/10
 Akt: ${fraAssessment?.triage?.start_act || 1}
