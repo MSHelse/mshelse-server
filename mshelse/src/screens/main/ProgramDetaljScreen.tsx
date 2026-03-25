@@ -26,7 +26,7 @@ const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> =
 };
 
 export default function ProgramDetaljScreen({ navigation, route }: any) {
-  const program = route?.params?.program;
+  const program = route?.params?.program; console.log('øvelse[0]:', JSON.stringify(program?.ovelser?.[0], null, 2));
   const assessment = route?.params?.assessment || null;
   const [ovelseData, setOvelseData] = useState<Record<string, any>>({});
   const [laster, setLaster] = useState(true);

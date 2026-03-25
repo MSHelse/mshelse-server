@@ -109,16 +109,13 @@ export default function ProgramBuilderScreen({ navigation, route }: any) {
   }
 
   function leggTilOvelse(ovelse: any) {
-    const formaal = ovelse.purposes?.[0] || null;
     setOvelser(prev => [...prev, {
       exerciseId: ovelse.id,
       navn: ovelse.name,
-      purposeId: formaal?.id || 'default',
-      formaalLabel: formaal?.label || '',
-      instruksjon: formaal?.instruction || '',
-      // Støtt både ny tracking_types og gammel tracking_type
-      tracking_types: formaal?.tracking_types || (formaal?.tracking_type ? [formaal.tracking_type] : ['completed']),
-      tracking_type: formaal?.tracking_types?.[0] || formaal?.tracking_type || 'completed',
+      formaalLabel: ovelse.formaalLabel || '',
+      instruksjon: ovelse.instruksjon || '',
+      tracking_types: ovelse.tracking_types || (ovelse.tracking_type ? [ovelse.tracking_type] : ['completed']),
+      tracking_type: ovelse.tracking_types?.[0] || ovelse.tracking_type || 'completed',
       sets: 3,
       reps: 10,
       hold: ovelse.hold || null,
@@ -133,21 +130,6 @@ export default function ProgramBuilderScreen({ navigation, route }: any) {
 
   function oppdaterOvelse(index: number, felt: string, verdi: any) {
     setOvelser(prev => prev.map((o, i) => i === index ? { ...o, [felt]: verdi } : o));
-  }
-
-  // Fix 2: byttFormaal slår nå opp i tilgjengeligeOvelser via exerciseId
-  function byttFormaal(ovelseIndex: number, exerciseId: string, purposeId: string) {
-    const tilgjOvelse = tilgjengeligeOvelser.find(o => o.id === exerciseId);
-    const formaal = tilgjOvelse?.purposes?.find((p: any) => p.id === purposeId);
-    if (!formaal) return;
-    setOvelser(prev => prev.map((o, i) => i === ovelseIndex ? {
-      ...o,
-      purposeId,
-      formaalLabel: formaal.label,
-      instruksjon: formaal.instruction,
-      tracking_types: formaal.tracking_types || (formaal.tracking_type ? [formaal.tracking_type] : ['completed']),
-      tracking_type: formaal.tracking_types?.[0] || formaal.tracking_type || 'completed',
-    } : o));
   }
 
   async function genererBaselineSporsmal(assessment: any): Promise<any[]> {
@@ -195,7 +177,6 @@ Svar KUN med JSON-array, ingen forklaringer:
     if (!user) return;
     setLagrer(true);
 
-    // Generer baseline-spørsmål hvis program er basert på assessment
     let baselineSporsmal: any[] = [];
     if (fraAssessment && !eksisterendeProgram) {
       baselineSporsmal = await genererBaselineSporsmal(fraAssessment);
@@ -225,7 +206,7 @@ Svar KUN med JSON-array, ingen forklaringer:
           opprettet: serverTimestamp(),
         });
       }
-      navigation.navigate('MainTabs');
+      navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
     } catch (e) {
       setValideringFeil('Noe gikk galt ved lagring. Prøv igjen.');
       console.error(e);
@@ -271,16 +252,10 @@ Svar KUN med JSON-array, ingen forklaringer:
           <Text style={s.genererSub}>
             Legg til øvelser via admin-panelet i Profil-fanen, så kan AI sette sammen et program.
           </Text>
-          <TouchableOpacity
-            style={s.genererKnapp}
-            onPress={() => navigation.navigate('AdminOvelse')}
-          >
+          <TouchableOpacity style={s.genererKnapp} onPress={() => navigation.navigate('AdminOvelse')}>
             <Text style={s.genererKnappTekst}>Gå til admin-panel</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={s.genererSekundar}
-            onPress={() => setGenFeil(null)}
-          >
+          <TouchableOpacity style={s.genererSekundar} onPress={() => setGenFeil(null)}>
             <Text style={s.genererSekundarTekst}>Bygg program manuelt i stedet</Text>
           </TouchableOpacity>
         </View>
@@ -301,16 +276,10 @@ Svar KUN med JSON-array, ingen forklaringer:
         <View style={s.genererCenter}>
           <Text style={s.genererTittel}>Noe gikk galt</Text>
           <Text style={s.genererSub}>Klarte ikke å generere program. Sjekk internettforbindelsen og prøv igjen.</Text>
-          <TouchableOpacity
-            style={s.genererKnapp}
-            onPress={() => genererProgram(tilgjengeligeOvelser)}
-          >
+          <TouchableOpacity style={s.genererKnapp} onPress={() => genererProgram(tilgjengeligeOvelser)}>
             <Text style={s.genererKnappTekst}>Prøv igjen</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={s.genererSekundar}
-            onPress={() => setGenFeil(null)}
-          >
+          <TouchableOpacity style={s.genererSekundar} onPress={() => setGenFeil(null)}>
             <Text style={s.genererSekundarTekst}>Bygg program manuelt i stedet</Text>
           </TouchableOpacity>
         </View>
@@ -348,8 +317,8 @@ Svar KUN med JSON-array, ingen forklaringer:
                     <View style={s.ovelseInfo}>
                       <Text style={s.ovelseNavn}>{o.name}</Text>
                       <Text style={s.ovelseMeta}>
+                        {o.formaalLabel ? `${o.formaalLabel} · ` : ''}
                         {(o.bodyParts || []).join(', ')}
-                        {o.purposes?.length ? ` · ${o.purposes.length} formål` : ''}
                       </Text>
                     </View>
                     <Text style={s.pil}>+</Text>
@@ -461,62 +430,37 @@ Svar KUN med JSON-array, ingen forklaringer:
             </View>
           ) : (
             <View style={s.kort}>
-              {ovelser.map((o, i) => {
-                // Fix 2: Slå opp full øvelse fra tilgjengeligeOvelser for formålsbytte
-                const tilgjOvelse = tilgjengeligeOvelser.find(t => t.id === o.exerciseId);
-                const harFlereFormaal = (tilgjOvelse?.purposes?.length || 0) > 1;
-
-                return (
-                  <View key={i} style={[s.programOvelseRad, i < ovelser.length - 1 && s.ovelseRadBorder]}>
-                    <View style={s.programOvelseInfo}>
-                      <Text style={s.ovelseNavn}>{o.navn}</Text>
-                      {o.formaalLabel ? <Text style={s.ovelseMeta}>{o.formaalLabel}</Text> : null}
-
-                      {/* Fix 2: Formålsvelger synlig når øvelsen har flere formål */}
-                      {harFlereFormaal && (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.formaalScroll}>
-                          {tilgjOvelse.purposes.map((p: any) => (
-                            <TouchableOpacity
-                              key={p.id}
-                              style={[s.formaalChip, o.purposeId === p.id && s.formaalChipAktiv]}
-                              onPress={() => byttFormaal(i, o.exerciseId, p.id)}
-                            >
-                              <Text style={[s.formaalChipTekst, o.purposeId === p.id && s.formaalChipTekstAktiv]}>
-                                {p.label}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      )}
-
-                      {/* Fix 7: Reps-stepper lagt til ved siden av sett-stepper */}
-                      <View style={s.settsRad}>
-                        <View style={s.settStepper}>
-                          <TouchableOpacity onPress={() => oppdaterOvelse(i, 'sets', Math.max(1, o.sets - 1))}>
-                            <Text style={s.stepperMini}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={s.stepperMiniVerdi}>{o.sets} sett</Text>
-                          <TouchableOpacity onPress={() => oppdaterOvelse(i, 'sets', o.sets + 1)}>
-                            <Text style={s.stepperMini}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <View style={s.settStepper}>
-                          <TouchableOpacity onPress={() => oppdaterOvelse(i, 'reps', Math.max(1, (o.reps || 10) - 1))}>
-                            <Text style={s.stepperMini}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={s.stepperMiniVerdi}>{o.reps || 10} reps</Text>
-                          <TouchableOpacity onPress={() => oppdaterOvelse(i, 'reps', (o.reps || 10) + 1)}>
-                            <Text style={s.stepperMini}>+</Text>
-                          </TouchableOpacity>
-                        </View>
+              {ovelser.map((o, i) => (
+                <View key={i} style={[s.programOvelseRad, i < ovelser.length - 1 && s.ovelseRadBorder]}>
+                  <View style={s.programOvelseInfo}>
+                    <Text style={s.ovelseNavn}>{o.navn}</Text>
+                    {o.formaalLabel ? <Text style={s.ovelseMeta}>{o.formaalLabel}</Text> : null}
+                    <View style={s.settsRad}>
+                      <View style={s.settStepper}>
+                        <TouchableOpacity onPress={() => oppdaterOvelse(i, 'sets', Math.max(1, o.sets - 1))}>
+                          <Text style={s.stepperMini}>−</Text>
+                        </TouchableOpacity>
+                        <Text style={s.stepperMiniVerdi}>{o.sets} sett</Text>
+                        <TouchableOpacity onPress={() => oppdaterOvelse(i, 'sets', o.sets + 1)}>
+                          <Text style={s.stepperMini}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View style={s.settStepper}>
+                        <TouchableOpacity onPress={() => oppdaterOvelse(i, 'reps', Math.max(1, (o.reps || 10) - 1))}>
+                          <Text style={s.stepperMini}>−</Text>
+                        </TouchableOpacity>
+                        <Text style={s.stepperMiniVerdi}>{o.reps || 10} reps</Text>
+                        <TouchableOpacity onPress={() => oppdaterOvelse(i, 'reps', (o.reps || 10) + 1)}>
+                          <Text style={s.stepperMini}>+</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => fjernOvelse(i)}>
-                      <Text style={s.fjernTekst}>×</Text>
-                    </TouchableOpacity>
                   </View>
-                );
-              })}
+                  <TouchableOpacity onPress={() => fjernOvelse(i)}>
+                    <Text style={s.fjernTekst}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
           )}
           <TouchableOpacity style={s.leggTilOvelseKnapp} onPress={() => setVisOvelsePicker(true)}>
@@ -585,20 +529,10 @@ const s = StyleSheet.create({
   ovelseMeta: { fontSize: 12, color: colors.muted, fontWeight: '400' },
   pil: { fontSize: 18, color: colors.green, fontWeight: '500' },
   fjernTekst: { fontSize: 20, color: colors.muted2, paddingHorizontal: 4 },
-
-  // Fix 7: sett + reps side om side
   settsRad: { flexDirection: 'row', gap: 8, marginTop: 4 },
   settStepper: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface2, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   stepperMini: { fontSize: 16, color: colors.text, paddingHorizontal: 4 },
   stepperMiniVerdi: { fontSize: 12, color: colors.text, fontWeight: '400', minWidth: 44, textAlign: 'center' },
-
-  // Fix 2: formålsvelger per øvelse
-  formaalScroll: { marginTop: 4, marginBottom: 2 },
-  formaalChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.surface2, marginRight: 6 },
-  formaalChipAktiv: { backgroundColor: colors.greenDim, borderColor: colors.greenBorder },
-  formaalChipTekst: { fontSize: 11, color: colors.muted },
-  formaalChipTekstAktiv: { color: colors.green },
-
   leggTilOvelseKnapp: { borderWidth: 1, borderColor: colors.border2, borderRadius: 10, borderStyle: 'dashed', padding: 14, alignItems: 'center' },
   leggTilOvelseTekst: { fontSize: 14, color: colors.muted, fontWeight: '400' },
   tomKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 16, alignItems: 'center', gap: 6 },

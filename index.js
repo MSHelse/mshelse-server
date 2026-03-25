@@ -255,7 +255,7 @@ app.post('/api/generer-program', async (req, res) => {
 REGLER:
 - Velg KUN øvelser fra listen som er sendt deg – ikke finn på egne
 - Match øvelser til akt og klinisk fokus
-- Velg riktig formål (purpose) per øvelse basert på klinisk kontekst
+- Hver øvelse i biblioteket er allerede en spesifikk variant med ett formål – velg de riktige variantene
 - Akt 1: deaktivering/mobilisering + lavterskel aktivering, 2-4 uker
 - Akt 2: aktivering med progresjon, stabilitet, 3-6 uker
 - Akt 3: progressiv styrke og utholdenhet, 4-8 uker
@@ -283,11 +283,10 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
     {
       "exerciseId": "id fra biblioteket",
       "navn": "navn fra biblioteket",
-      "purposeId": "id fra øvelsens purposes",
-      "formaalLabel": "label fra purpose",
-      "instruksjon": "instruksjon fra purpose",
+      "formaalLabel": "formaalLabel fra øvelsen",
+      "instruksjon": "instruksjon fra øvelsen",
       "personligKontekst": "1-3 setninger tilpasset denne brukerens spesifikke funn og kompensasjonsmønstre",
-      "tracking_types": ["fra purpose"],
+      "tracking_types": ["fra øvelsen"],
       "tracking_type": "første tracking type",
       "sets": 3,
       "reps": 10,
@@ -302,13 +301,10 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
       name: o.name,
       bodyParts: o.bodyParts || [],
       act: o.act || [],
-      purposes: (o.purposes || []).map((p) => ({
-        id: p.id,
-        label: p.label,
-        instruction: p.instruction,
-        tracking_types: p.tracking_types || (p.tracking_type ? [p.tracking_type] : ['completed']),
-        kliniskNotat: p.kliniskNotat || '',
-      })),
+      formaalLabel: o.formaalLabel || '',
+      instruksjon: o.instruksjon || '',
+      tracking_types: o.tracking_types || (o.tracking_type ? [o.tracking_type] : ['completed']),
+      kliniskNotat: o.kliniskNotat || '',
     }));
 
     // Bygg kontekst avhengig av om det er første kartlegging eller reassessment

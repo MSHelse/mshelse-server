@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   SafeAreaView, Image
@@ -9,7 +9,6 @@ import { colors } from '../../theme/colors';
 export default function OvelseDetaljScreen({ navigation, route }: any) {
   const ovelse = route?.params?.ovelse;
   const personligKontekst: string | null = route?.params?.personligKontekst || null;
-  const [valgtFormaal, setValgtFormaal] = useState(ovelse?.purposes?.[0] || null);
 
   if (!ovelse) {
     return (
@@ -54,33 +53,16 @@ export default function OvelseDetaljScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {ovelse.purposes?.length > 1 && (
+        {ovelse.instruksjon ? (
           <View style={s.seksjon}>
-            <Text style={s.seksjonTittel}>FORMÅL</Text>
-            <View style={s.formaalRad}>
-              {ovelse.purposes.map((p: any) => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[s.formaalKnapp, valgtFormaal?.id === p.id && s.formaalKnappAktiv]}
-                  onPress={() => setValgtFormaal(p)}
-                >
-                  <Text style={[s.formaalTekst, valgtFormaal?.id === p.id && s.formaalTekstAktiv]}>
-                    {p.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {valgtFormaal?.instruction && (
-          <View style={s.seksjon}>
-            <Text style={s.seksjonTittel}>INSTRUKSJON</Text>
+            {ovelse.formaalLabel && (
+              <Text style={s.seksjonTittel}>{ovelse.formaalLabel.toUpperCase()}</Text>
+            )}
             <View style={s.instruksjonKort}>
-              <Text style={s.instruksjonTekst}>{valgtFormaal.instruction}</Text>
+              <Text style={s.instruksjonTekst}>{ovelse.instruksjon}</Text>
             </View>
           </View>
-        )}
+        ) : null}
 
         {ovelse.anatomyImageUrl && (
           <View style={s.seksjon}>
@@ -134,11 +116,6 @@ const s = StyleSheet.create({
   kontekstKort: { backgroundColor: colors.greenDim, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: 14, padding: 14, gap: 6 },
   kontekstLabel: { fontSize: 10, color: colors.green, fontWeight: '600', letterSpacing: 1.0 },
   kontekstTekst: { fontSize: 14, color: colors.text, fontWeight: '400', lineHeight: 22 },
-  formaalRad: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  formaalKnapp: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.surface },
-  formaalKnappAktiv: { backgroundColor: colors.greenDim, borderColor: colors.greenBorder },
-  formaalTekst: { fontSize: 13, color: colors.muted, fontWeight: '500' },
-  formaalTekstAktiv: { color: colors.green },
   instruksjonKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 14 },
   instruksjonTekst: { fontSize: 14, color: colors.text, fontWeight: '400', lineHeight: 22 },
   anatomiWrapper: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, overflow: 'hidden', alignItems: 'center', padding: 16 },
