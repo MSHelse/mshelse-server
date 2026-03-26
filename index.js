@@ -255,7 +255,7 @@ app.post('/api/generer-program', async (req, res) => {
 REGLER:
 - Velg KUN øvelser fra listen som er sendt deg – ikke finn på egne
 - Match øvelser til akt og klinisk fokus
-- Hver øvelse i biblioteket er allerede en spesifikk variant med ett formål – velg de riktige variantene
+- Velg riktig formål (purpose) per øvelse basert på klinisk kontekst
 - Akt 1: deaktivering/mobilisering + lavterskel aktivering, 2-4 uker
 - Akt 2: aktivering med progresjon, stabilitet, 3-6 uker
 - Akt 3: progressiv styrke og utholdenhet, 4-8 uker
@@ -267,11 +267,12 @@ REGLER:
 
 PERSONLIG KONTEKST PER ØVELSE:
 For hver øvelse skal du skrive en kort personlig kontekst (1-3 setninger) som forklarer:
-1. Hvorfor akkurat denne øvelsen er valgt for denne brukeren basert på funnene
-2. Hva brukeren spesifikt bør fokusere på eller passe på gitt deres kompensasjonsmønstre
-3. Eventuelt hva de ikke skal gjøre basert på det vi vet om dem
-Konteksten skal føles som om en kliniker snakker direkte til brukeren – ikke generisk instruksjon.
-Eksempel: "For deg spesielt er dette valgt fordi kartleggingen viste at du kompenserer med korsrygg ved hoftefleksjon. Fokuser på å holde korsryggen nøytral og kjenn at hoftefleksorene jobber isolert – stopp settet hvis du kjenner spenning i ryggen."
+1. Hvorfor akkurat denne øvelsen er valgt for denne brukeren – koble til kartleggingsfunnene
+2. Hvilket kompensasjonsmønster eller svakhet øvelsen adresserer hos denne personen spesifikt
+3. Eventuelt hva de bør være obs på gitt det vi vet om dem – ikke generelle utførelsesinstruksjoner
+Konteksten handler om HVORFOR og KLINISK RELEVANS – ikke om HVORDAN øvelsen gjøres (det er instruksjonens jobb).
+Feil eksempel: "Fokuser på å holde korsryggen nøytral og senk deg sakte ned."
+Riktig eksempel: "Valgt fordi kartleggingen viste overaktiv iliopsoas og svak gluteus maximus. Denne øvelsen adresserer direkte ubalansen som gir deg korsryggsmerter ved stillesitting."
 
 RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
 {
@@ -283,10 +284,11 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
     {
       "exerciseId": "id fra biblioteket",
       "navn": "navn fra biblioteket",
-      "formaalLabel": "formaalLabel fra øvelsen",
-      "instruksjon": "instruksjon fra øvelsen",
+      "purposeId": "id fra øvelsens purposes",
+      "formaalLabel": "label fra purpose",
+      "instruksjon": "instruksjon fra purpose",
       "personligKontekst": "1-3 setninger tilpasset denne brukerens spesifikke funn og kompensasjonsmønstre",
-      "tracking_types": ["fra øvelsen"],
+      "tracking_types": ["fra purpose"],
       "tracking_type": "første tracking type",
       "sets": 3,
       "reps": 10,
@@ -301,10 +303,13 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
       name: o.name,
       bodyParts: o.bodyParts || [],
       act: o.act || [],
-      formaalLabel: o.formaalLabel || '',
-      instruksjon: o.instruksjon || '',
-      tracking_types: o.tracking_types || (o.tracking_type ? [o.tracking_type] : ['completed']),
-      kliniskNotat: o.kliniskNotat || '',
+      purposes: (o.purposes || []).map((p) => ({
+        id: p.id,
+        label: p.label,
+        instruction: p.instruction,
+        tracking_types: p.tracking_types || (p.tracking_type ? [p.tracking_type] : ['completed']),
+        kliniskNotat: p.kliniskNotat || '',
+      })),
     }));
 
     // Bygg kontekst avhengig av om det er første kartlegging eller reassessment

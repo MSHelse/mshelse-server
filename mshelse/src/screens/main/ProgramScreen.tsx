@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  SafeAreaView, ActivityIndicator
+  SafeAreaView, ActivityIndicator, Alert
 } from 'react-native';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../services/firebase';
 import { colors } from '../../theme/colors';
 
@@ -19,13 +19,18 @@ const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> =
   3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
 };
 
+function formaterDato(ts: any): string {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 export default function ProgramScreen({ navigation }: any) {
   const [laster, setLaster] = useState(true);
   const [programmer, setProgrammer] = useState<any[]>([]);
   const [sisteAssessment, setSisteAssessment] = useState<any>(null);
 
   useEffect(() => { hentData(); }, []);
-
   useEffect(() => {
     const unsub = navigation.addListener('focus', () => hentData());
     return unsub;
@@ -40,14 +45,23 @@ export default function ProgramScreen({ navigation }: any) {
         getDocs(query(collection(db, 'users', user.uid, 'assessments'), orderBy('dato', 'desc'))),
       ]);
       setProgrammer(progSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      if (!assessSnap.empty) {
-        setSisteAssessment({ id: assessSnap.docs[0].id, ...assessSnap.docs[0].data() });
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLaster(false);
-    }
+      if (!assessSnap.empty) setSisteAssessment({ id: assessSnap.docs[0].id, ...assessSnap.docs[0].data() });
+    } catch (e) { console.error(e); }
+    finally { setLaster(false); }
+  }
+
+  async function slettProgram(p: any) {
+    const user = auth.currentUser;
+    if (!user) return;
+    Alert.alert('Slett program', `Vil du slette "${p.tittel}"? Dette kan ikke angres.`, [
+      { text: 'Avbryt', style: 'cancel' },
+      { text: 'Slett', style: 'destructive', onPress: async () => {
+        try {
+          await deleteDoc(doc(db, 'users', user.uid, 'programs', p.id));
+          await hentData();
+        } catch (e) { console.error(e); }
+      }},
+    ]);
   }
 
   const aktiveProgrammer = programmer.filter(p => p.aktiv);
@@ -56,13 +70,11 @@ export default function ProgramScreen({ navigation }: any) {
   const aktInfo = akt ? AKT_BESKRIVELSE[akt] : null;
   const aktFarge = akt ? AKT_FARGE[akt] : null;
 
-  if (laster) {
-    return (
-      <SafeAreaView style={s.container}>
-        <View style={s.center}><ActivityIndicator color={colors.accent} /></View>
-      </SafeAreaView>
-    );
-  }
+  if (laster) return (
+    <SafeAreaView style={s.container}>
+      <View style={s.center}><ActivityIndicator color={colors.accent} /></View>
+    </SafeAreaView>
+  );
 
   return (
     <SafeAreaView style={s.container}>
@@ -85,23 +97,19 @@ export default function ProgramScreen({ navigation }: any) {
                 </View>
               )}
             </View>
-
             {aktInfo && (
               <View style={s.aiFaseKort}>
                 <Text style={s.aiFaseTittel}>{aktInfo.tittel}</Text>
                 <Text style={s.aiFaseTekst}>{aktInfo.tekst}</Text>
               </View>
             )}
-
             <Text style={s.aiBody}>
-              Basert på <Text style={s.aiBodyBold}>{sisteAssessment.tittel}</Text>
+              Basert på kartleggingen <Text style={s.aiBodyBold}>{sisteAssessment.tittel}</Text>
               {sisteAssessment.triage?.goal ? ` – mål: ${sisteAssessment.triage.goal}` : ''}
             </Text>
-
             {sisteAssessment.triage?.next_step ? (
               <Text style={s.nextStep}>{sisteAssessment.triage.next_step}</Text>
             ) : null}
-
             <TouchableOpacity
               style={s.aiKnapp}
               onPress={() => navigation.navigate('ProgramBuilder', {
@@ -129,46 +137,52 @@ export default function ProgramScreen({ navigation }: any) {
             <View style={s.kortListe}>
               {aktiveProgrammer.map((p, i) => {
                 const fremgang = p.okterTotalt > 0
-                  ? Math.min(100, Math.round((p.okterFullfort / p.okterTotalt) * 100))
-                  : 0;
-                const pAktFarge = p.akt ? AKT_FARGE[p.akt] : null;
+                  ? Math.min(100, Math.round((p.okterFullfort / p.okterTotalt) * 100)) : 0;
+                const pFarge = p.akt ? AKT_FARGE[p.akt] : null;
                 return (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[s.programKort, i < aktiveProgrammer.length - 1 && s.programKortBorder]}
-                    onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}
-                  >
-                    <View style={s.programKortTopp}>
-                      <View style={s.programKortInfo}>
-                        {p.akt && pAktFarge && (
-                          <View style={[s.aktTag, { backgroundColor: pAktFarge.bg, borderColor: pAktFarge.border }]}>
-                            <Text style={[s.aktTagTekst, { color: pAktFarge.tekst }]}>Akt {p.akt}</Text>
-                          </View>
-                        )}
-                        <Text style={s.programTittel}>{p.tittel}</Text>
-                        <Text style={s.programMeta}>
-                          {p.dager?.join(' · ')}
-                          {p.uker ? ` · ${p.uker} uker` : ''}
-                          {p.ovelser?.length ? ` · ${p.ovelser.length} øvelser` : ''}
-                        </Text>
-                      </View>
-                      <Text style={s.chevron}>›</Text>
-                    </View>
-                    {p.okterTotalt > 0 && (
-                      <View style={s.progresjon}>
-                        <View style={s.progBar}>
-                          <View style={[s.progFill, { width: `${fremgang}%` as any }]} />
+                  <View key={p.id} style={[s.programKort, i < aktiveProgrammer.length - 1 && s.programKortBorder]}>
+                    <TouchableOpacity onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}>
+                      <View style={s.programKortTopp}>
+                        <View style={s.programKortInfo}>
+                          {p.akt && pFarge && (
+                            <View style={[s.aktTag, { backgroundColor: pFarge.bg, borderColor: pFarge.border }]}>
+                              <Text style={[s.aktTagTekst, { color: pFarge.tekst }]}>Akt {p.akt}</Text>
+                            </View>
+                          )}
+                          <Text style={s.programTittel}>{p.tittel}</Text>
+                          <Text style={s.programMeta}>
+                            {p.dager?.join(' · ')}
+                            {p.uker ? ` · ${p.uker} uker` : ''}
+                            {p.ovelser?.length ? ` · ${p.ovelser.length} øvelser` : ''}
+                          </Text>
+                          {p.opprettet && <Text style={s.datoTekst}>Startet {formaterDato(p.opprettet)}</Text>}
                         </View>
-                        <Text style={s.progTekst}>{fremgang}% · {p.okterFullfort ?? 0}/{p.okterTotalt} økter</Text>
+                        {p.uke && p.uker ? <Text style={s.ukeLabel}>Uke {p.uke}/{p.uker}</Text> : null}
                       </View>
-                    )}
-                    <TouchableOpacity
-                      style={s.startKnapp}
-                      onPress={() => navigation.navigate('AktivOkt', { program: p, assessment: sisteAssessment })}
-                    >
-                      <Text style={s.startKnappTekst}>Start økt →</Text>
+                      {p.okterTotalt > 0 && (
+                        <View style={s.progresjon}>
+                          <View style={s.progBar}>
+                            <View style={[s.progFill, { width: `${fremgang}%` as any }]} />
+                          </View>
+                          <View style={s.progRow}>
+                            <Text style={s.progTekst}>{fremgang}% fullført</Text>
+                            <Text style={s.progTekst}>{p.okterFullfort ?? 0}/{p.okterTotalt} økter</Text>
+                          </View>
+                        </View>
+                      )}
                     </TouchableOpacity>
-                  </TouchableOpacity>
+                    <View style={s.programKnapper}>
+                      <TouchableOpacity style={[s.btnPrimary, { flex: 1 }]} onPress={() => navigation.navigate('AktivOkt', { program: p, assessment: sisteAssessment })}>
+                        <Text style={s.btnPrimaryTekst}>Start økt</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.btnSekundar} onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}>
+                        <Text style={s.btnSekundarTekst}>Detaljer</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.btnSlett} onPress={() => slettProgram(p)}>
+                        <Text style={s.btnSlettTekst}>🗑</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 );
               })}
             </View>
@@ -190,17 +204,23 @@ export default function ProgramScreen({ navigation }: any) {
             <Text style={s.seksjonTittel}>ARKIVERTE PROGRAMMER</Text>
             <View style={s.kortListe}>
               {arkiverte.map((p, i) => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[s.programKort, s.programKortDimmet, i < arkiverte.length - 1 && s.programKortBorder]}
-                  onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}
-                >
-                  <Text style={s.programTittelDimmet}>{p.tittel}</Text>
-                  <Text style={s.programMeta}>
-                    {p.uker ? `${p.uker} uker · ` : ''}
-                    {p.ovelser?.length ? `${p.ovelser.length} øvelser` : ''}
-                  </Text>
-                </TouchableOpacity>
+                <View key={p.id} style={[s.programKort, s.programKortDimmet, i < arkiverte.length - 1 && s.programKortBorder]}>
+                  <TouchableOpacity style={s.programKortTopp} onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}>
+                    <View style={s.programKortInfo}>
+                      <Text style={s.programTittelDimmet}>{p.tittel}</Text>
+                      <Text style={s.programMeta}>
+                        {p.uker ? `${p.uker} uker · ` : ''}
+                        {p.ovelser?.length ? `${p.ovelser.length} øvelser` : ''}
+                      </Text>
+                      {p.opprettet && <Text style={s.datoTekst}>Startet {formaterDato(p.opprettet)}</Text>}
+                    </View>
+                  </TouchableOpacity>
+                  <View style={[s.programKnapper, { borderTopWidth: 0, paddingTop: 0 }]}>
+                    <TouchableOpacity style={s.btnSlett} onPress={() => slettProgram(p)}>
+                      <Text style={s.btnSlettTekst}>🗑 Slett</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ))}
             </View>
           </View>
@@ -221,40 +241,45 @@ const s = StyleSheet.create({
   inner: { padding: 16, paddingBottom: 40, gap: 20 },
   seksjon: { gap: 10 },
   seksjonTittel: { fontSize: 11, color: colors.muted, fontWeight: '500', letterSpacing: 1.0 },
-  aiBox: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 16, gap: 12 },
+  aiBox: { backgroundColor: colors.greenDim, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: 14, padding: 16, gap: 10 },
   aiTopRad: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  aiLabel: { fontSize: 10, color: colors.muted, fontWeight: '500', letterSpacing: 1.0 },
+  aiLabel: { fontSize: 10, color: colors.green, fontWeight: '600', letterSpacing: 1.0 },
   aktBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  aktBadgeTekst: { fontSize: 11, fontWeight: '600', letterSpacing: 0.4 },
-  aiFaseKort: { backgroundColor: colors.surface2, borderRadius: 10, padding: 12, gap: 4 },
-  aiFaseTittel: { fontSize: 13, fontWeight: '500', color: colors.text },
+  aktBadgeTekst: { fontSize: 10, fontWeight: '600', letterSpacing: 0.4 },
+  aiFaseKort: { backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 8, padding: 10, gap: 3 },
+  aiFaseTittel: { fontSize: 13, color: colors.text, fontWeight: '500' },
   aiFaseTekst: { fontSize: 12, color: colors.muted, fontWeight: '300', lineHeight: 18 },
   aiBody: { fontSize: 13, color: colors.muted, fontWeight: '300', lineHeight: 20 },
   aiBodyBold: { color: colors.text, fontWeight: '400' },
   nextStep: { fontSize: 12, color: colors.muted2, fontWeight: '300', fontStyle: 'italic' },
-  aiKnapp: { backgroundColor: colors.accent, borderRadius: 8, padding: 12, alignItems: 'center' },
-  aiKnappTekst: { color: colors.bg, fontSize: 14, fontWeight: '600' },
+  aiKnapp: { backgroundColor: colors.green, borderRadius: 8, padding: 11, alignItems: 'center' },
+  aiKnappTekst: { color: '#fff', fontSize: 14, fontWeight: '600' },
   kortListe: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, overflow: 'hidden' },
-  programKort: { padding: 14, gap: 10 },
+  programKort: { backgroundColor: colors.surface },
   programKortBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  programKortDimmet: { opacity: 0.5 },
-  programKortTopp: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  programKortDimmet: { opacity: 0.6 },
+  programKortTopp: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 14, paddingBottom: 8 },
   programKortInfo: { flex: 1, gap: 4 },
   aktTag: { borderWidth: 1, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2, alignSelf: 'flex-start' },
-  aktTagTekst: { fontSize: 10, fontWeight: '600', letterSpacing: 0.4 },
+  aktTagTekst: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
   programTittel: { fontSize: 15, fontWeight: '500', color: colors.text },
-  programTittelDimmet: { fontSize: 14, fontWeight: '400', color: colors.muted },
+  programTittelDimmet: { fontSize: 15, fontWeight: '400', color: colors.muted },
   programMeta: { fontSize: 12, color: colors.muted, fontWeight: '300' },
-  chevron: { fontSize: 18, color: colors.muted2 },
-  progresjon: { gap: 4 },
+  datoTekst: { fontSize: 11, color: colors.muted2, fontWeight: '300' },
+  ukeLabel: { fontSize: 11, color: colors.muted2 },
+  progresjon: { paddingHorizontal: 14, paddingBottom: 10, gap: 5 },
   progBar: { height: 3, backgroundColor: colors.border2, borderRadius: 2, overflow: 'hidden' },
   progFill: { height: '100%', backgroundColor: colors.green, borderRadius: 2 },
-  progTekst: { fontSize: 11, color: colors.muted2, fontWeight: '300' },
-  startKnapp: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, padding: 10, alignItems: 'center' },
-  startKnappTekst: { fontSize: 13, color: colors.text, fontWeight: '500' },
+  progRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  progTekst: { fontSize: 11, color: colors.muted2 },
+  programKnapper: { flexDirection: 'row', gap: 8, padding: 14, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border },
+  btnPrimary: { backgroundColor: colors.accent, borderRadius: 8, padding: 11, alignItems: 'center' },
+  btnPrimaryTekst: { color: colors.bg, fontSize: 14, fontWeight: '500' },
+  btnSekundar: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, padding: 11, paddingHorizontal: 16, alignItems: 'center' },
+  btnSekundarTekst: { color: colors.muted, fontSize: 14, fontWeight: '400' },
+  btnSlett: { backgroundColor: colors.dangerDim, borderWidth: 1, borderColor: colors.dangerBorder, borderRadius: 8, padding: 11, paddingHorizontal: 14, alignItems: 'center' },
+  btnSlettTekst: { color: colors.danger, fontSize: 13 },
   ingenKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 24, alignItems: 'center', gap: 12 },
   ingenTittel: { fontSize: 16, fontWeight: '400', color: colors.text },
   ingenSub: { fontSize: 13, color: colors.muted, fontWeight: '300', textAlign: 'center', lineHeight: 20 },
-  btnPrimary: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 11, paddingHorizontal: 24 },
-  btnPrimaryTekst: { color: colors.bg, fontSize: 14, fontWeight: '600' },
 });

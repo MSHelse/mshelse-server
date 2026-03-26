@@ -9,6 +9,9 @@ import { colors } from '../../theme/colors';
 export default function OvelseDetaljScreen({ navigation, route }: any) {
   const ovelse = route?.params?.ovelse;
   const personligKontekst: string | null = route?.params?.personligKontekst || null;
+  // Støtt både ny flat struktur og gammel purposes[]-struktur
+  const instruksjonTekst: string = ovelse?.instruksjon || ovelse?.purposes?.[0]?.instruction || '';
+  const formaalLabelTekst: string = ovelse?.formaalLabel || ovelse?.purposes?.[0]?.label || '';
 
   if (!ovelse) {
     return (
@@ -53,13 +56,13 @@ export default function OvelseDetaljScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {ovelse.instruksjon ? (
+        {instruksjonTekst ? (
           <View style={s.seksjon}>
-            {ovelse.formaalLabel && (
-              <Text style={s.seksjonTittel}>{ovelse.formaalLabel.toUpperCase()}</Text>
-            )}
+            {formaalLabelTekst ? (
+              <Text style={s.seksjonTittel}>{formaalLabelTekst.toUpperCase()}</Text>
+            ) : null}
             <View style={s.instruksjonKort}>
-              <Text style={s.instruksjonTekst}>{ovelse.instruksjon}</Text>
+              <Text style={s.instruksjonTekst}>{instruksjonTekst}</Text>
             </View>
           </View>
         ) : null}
