@@ -15,28 +15,17 @@ const KROPPSDELER = ['Korsrygg', 'Hofte', 'Nakke', 'Skulder', 'Kne', 'Legg', 'Co
 const AKT_VALG = [1, 2, 3];
 
 const TRACKING_TYPER: { id: string; label: string }[] = [
-  { id: 'completed',       label: 'Fullført' },
+  { id: 'completed',        label: 'Fullført' },
   { id: 'activation_quality', label: 'Aktivering (0–10)' },
-  { id: 'contact_reps',    label: 'Reps m/kontakt' },
-  { id: 'sets_reps',       label: 'Sett/reps' },
+  { id: 'contact_reps',     label: 'Reps m/kontakt' },
+  { id: 'sets_reps',        label: 'Sett/reps' },
   { id: 'sets_reps_weight', label: 'Sett/reps/motstand' },
-  { id: 'mobility',        label: 'Bevegelighet (0–10)' },
-  { id: 'rpe',             label: 'Anstrengelse (RPE)' },
-  { id: 'side_diff',       label: 'Sideforskjell' },
+  { id: 'mobility',         label: 'Bevegelighet (0–10)' },
+  { id: 'rpe',              label: 'Anstrengelse (RPE)' },
+  { id: 'side_diff',        label: 'Sideforskjell' },
 ];
 
 const MOTSTAND_TYPER = ['Kroppsvekt', 'Strikk', 'Manualer', 'Stang', 'Kettlebell', 'Kabelmaskin'];
-
-function tomFormaal() {
-  return {
-    id: `formaal_${Date.now()}`,
-    label: '',
-    instruction: '',
-    tracking_types: ['completed'] as string[],
-    motstandsType: [] as string[],
-    kliniskNotat: '',
-  };
-}
 
 export default function AdminOvelseScreen({ navigation }: any) {
   const [visForm, setVisForm] = useState(false);
@@ -59,10 +48,14 @@ export default function AdminOvelseScreen({ navigation }: any) {
   const [valgteAkt, setValgteAkt] = useState<number[]>([]);
   const [primerMuskler, setPrimerMuskler] = useState('');
   const [sekundarMuskler, setSekundarMuskler] = useState('');
-  const [formaal, setFormaal] = useState<any[]>([tomFormaal()]);
 
-  // Per-formål AI-generering
-  const [generererNotat, setGenerererNotat] = useState<Record<number, boolean>>({});
+  // Flat variant-felt (erstatter purposes[])
+  const [formaalLabel, setFormaalLabel] = useState('');
+  const [instruksjon, setInstruksjon] = useState('');
+  const [trackingTypes, setTrackingTypes] = useState<string[]>(['completed']);
+  const [motstandsType, setMotstandsType] = useState<string[]>([]);
+  const [kliniskNotat, setKliniskNotat] = useState('');
+  const [generererNotat, setGenerererNotat] = useState(false);
 
   const user = auth.currentUser;
 
@@ -87,7 +80,9 @@ export default function AdminOvelseScreen({ navigation }: any) {
     setHold(''); setTempo('');
     setValgteKroppsdeler([]); setValgteAkt([]);
     setPrimerMuskler(''); setSekundarMuskler('');
-    setFormaal([tomFormaal()]);
+    setFormaalLabel(''); setInstruksjon('');
+    setTrackingTypes(['completed']); setMotstandsType([]);
+    setKliniskNotat('');
     setRedigerer(null);
   }
 
@@ -103,17 +98,11 @@ export default function AdminOvelseScreen({ navigation }: any) {
     setValgteAkt(o.act || []);
     setPrimerMuskler((o.muskelgrupper?.primer || []).join(', '));
     setSekundarMuskler((o.muskelgrupper?.sekundar || []).join(', '));
-    setFormaal(
-      o.purposes?.length > 0
-        ? o.purposes.map((f: any) => ({
-            ...f,
-            // støtt både gammel tracking_type og ny tracking_types
-            tracking_types: f.tracking_types || (f.tracking_type ? [f.tracking_type] : ['completed']),
-            motstandsType: f.motstandsType || [],
-            kliniskNotat: f.kliniskNotat || '',
-          }))
-        : [tomFormaal()]
-    );
+    setFormaalLabel(o.formaalLabel || '');
+    setInstruksjon(o.instruksjon || '');
+    setTrackingTypes(o.tracking_types || (o.tracking_type ? [o.tracking_type] : ['completed']));
+    setMotstandsType(o.motstandsType || []);
+    setKliniskNotat(o.kliniskNotat || '');
     setVisForm(true);
   }
 
@@ -125,66 +114,48 @@ export default function AdminOvelseScreen({ navigation }: any) {
     setValgteAkt(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a]);
   }
 
-  function oppdaterFormaal(index: number, felt: string, verdi: any) {
-    setFormaal(prev => prev.map((f, i) => i === index ? { ...f, [felt]: verdi } : f));
+  function toggleTrackingType(type: string) {
+    setTrackingTypes(prev => {
+      const har = prev.includes(type);
+      const ny = har ? prev.filter(t => t !== type) : [...prev, type];
+      return ny.length > 0 ? ny : ['completed'];
+    });
   }
 
-  function toggleTrackingType(index: number, type: string) {
-    setFormaal(prev => prev.map((f, i) => {
-      if (i !== index) return f;
-      const har = (f.tracking_types || []).includes(type);
-      const nyeListe = har
-        ? f.tracking_types.filter((t: string) => t !== type)
-        : [...(f.tracking_types || []), type];
-      return { ...f, tracking_types: nyeListe.length > 0 ? nyeListe : ['completed'] };
-    }));
+  function toggleMotstand(type: string) {
+    setMotstandsType(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
   }
 
-  function toggleMotstand(index: number, type: string) {
-    setFormaal(prev => prev.map((f, i) => {
-      if (i !== index) return f;
-      const har = (f.motstandsType || []).includes(type);
-      return { ...f, motstandsType: har ? f.motstandsType.filter((t: string) => t !== type) : [...(f.motstandsType || []), type] };
-    }));
-  }
-
-  function leggTilFormaal() {
-    setFormaal(prev => [...prev, tomFormaal()]);
-  }
-
-  function fjernFormaal(index: number) {
-    setFormaal(prev => prev.filter((_, i) => i !== index));
-  }
-
-  async function genererAINotat(index: number) {
-    const f = formaal[index];
-    if (!f.label.trim() && !f.instruction.trim()) {
-      Alert.alert('Fyll inn formål-navn og instruksjon først');
+  async function genererAINotat() {
+    if (!instruksjon.trim()) {
+      Alert.alert('Fyll inn instruksjon først');
       return;
     }
-    setGenerererNotat(prev => ({ ...prev, [index]: true }));
+    setGenerererNotat(true);
     try {
       const primer = primerMuskler.trim() || '(ikke spesifisert)';
       const sekundar = sekundarMuskler.trim() || '(ikke spesifisert)';
       const kropp = valgteKroppsdeler.join(', ') || '(ikke spesifisert)';
       const akt = valgteAkt.join(', ') || '(ikke spesifisert)';
-      const motstand = f.motstandsType?.length ? f.motstandsType.join(', ') : '';
+      const motstand = motstandsType.length ? motstandsType.join(', ') : '';
 
       const prompt = `Du er en klinisk muskel- og skjeletterapeut med 30 års erfaring.
 
-Skriv et kort klinisk notat (2–4 setninger) for denne øvelsesvarianten som skal brukes av en AI for å velge riktige øvelser til rehabiliteringsprogrammer.
+Skriv et kort klinisk notat (2–4 setninger) for denne øvelsen som skal brukes av en AI for å velge riktige øvelser til rehabiliteringsprogrammer.
 
 Øvelse: ${navn || '(ikke navngitt)'}
-Formål/variant: ${f.label}
-Instruksjon: ${f.instruction}
+Formål/variant: ${formaalLabel || '(ikke spesifisert)'}
+Instruksjon: ${instruksjon}
 Kroppsdeler: ${kropp}
 Primære muskler: ${primer}
 Sekundære muskler: ${sekundar}
 Akt: ${akt}
-Tracking-typer: ${(f.tracking_types || []).join(', ')}${motstand ? `\nMotstandstype: ${motstand}` : ''}
+Tracking-typer: ${trackingTypes.join(', ')}${motstand ? `\nMotstandstype: ${motstand}` : ''}
 
 Notatet skal beskrive:
-- Hvilke muskler og strukturer som primært aktiveres i denne varianten
+- Hvilke muskler og strukturer som primært aktiveres
 - Hvilke kliniske tilstander eller kompensasjonsmønstre øvelsen adresserer
 - Eventuelle kontraindikasjoner eller forsiktighetsregler
 
@@ -203,7 +174,7 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
       const data = await res.json();
       const tekst = data.content?.[0]?.text?.trim() || '';
       if (tekst) {
-        oppdaterFormaal(index, 'kliniskNotat', tekst);
+        setKliniskNotat(tekst);
       } else {
         Alert.alert('Ingen tekst generert. Prøv igjen.');
       }
@@ -211,7 +182,7 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
       Alert.alert('Feil ved AI-generering. Sjekk internett og prøv igjen.');
       console.error(e);
     } finally {
-      setGenerererNotat(prev => ({ ...prev, [index]: false }));
+      setGenerererNotat(false);
     }
   }
 
@@ -260,16 +231,12 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
       bodyParts: valgteKroppsdeler,
       act: valgteAkt,
       muskelgrupper: { primer: primerListe, sekundar: sekundarListe },
-      purposes: formaal
-        .filter(f => f.label.trim())
-        .map(f => ({
-          id: f.id,
-          label: f.label,
-          instruction: f.instruction,
-          tracking_types: f.tracking_types || ['completed'],
-          motstandsType: (f.tracking_types || []).includes('sets_reps_weight') ? (f.motstandsType || []) : [],
-          kliniskNotat: f.kliniskNotat || '',
-        })),
+      formaalLabel: formaalLabel.trim(),
+      instruksjon: instruksjon.trim(),
+      tracking_types: trackingTypes,
+      tracking_type: trackingTypes[0] || 'completed',
+      motstandsType: trackingTypes.includes('sets_reps_weight') ? motstandsType : [],
+      kliniskNotat: kliniskNotat.trim(),
     };
 
     try {
@@ -312,10 +279,10 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
 
         <ScrollView contentContainerStyle={s.formInner}>
 
-          {/* Grunninfo */}
           <View style={s.feltGruppe}>
             <Text style={s.feltLabel}>NAVN</Text>
-            <TextInput style={s.input} value={navn} onChangeText={setNavn} placeholder="f.eks. Frog pumps" placeholderTextColor={colors.muted2} />
+            <TextInput style={s.input} value={navn} onChangeText={setNavn} placeholder="f.eks. Benhev – Aktivering" placeholderTextColor={colors.muted2} />
+            <Text style={s.inputHint}>Inkluder varianten i navnet, f.eks. "Frog pumps – Stabilitet"</Text>
           </View>
 
           <View style={s.feltGruppe}>
@@ -342,12 +309,9 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
                   </Text>
               }
             </TouchableOpacity>
-            {anatomyImageUrl ? (
-              <Text style={s.uploadUrl} numberOfLines={1}>{anatomyImageUrl}</Text>
-            ) : null}
+            {anatomyImageUrl ? <Text style={s.uploadUrl} numberOfLines={1}>{anatomyImageUrl}</Text> : null}
           </View>
 
-          {/* Hold og tempo */}
           <View style={s.radFelter}>
             <View style={[s.feltGruppe, { flex: 1 }]}>
               <Text style={s.feltLabel}>HOLD (sekunder)</Text>
@@ -373,9 +337,8 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
             </View>
           </View>
 
-          {/* Kroppsdeler */}
           <View style={s.feltGruppe}>
-            <Text style={s.feltLabel}>KROPPSDELER (brukerfiltrering)</Text>
+            <Text style={s.feltLabel}>KROPPSDELER</Text>
             <View style={s.chipRad}>
               {KROPPSDELER.map(del => (
                 <TouchableOpacity
@@ -389,32 +352,18 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
             </View>
           </View>
 
-          {/* Muskelgrupper */}
           <View style={s.feltGruppe}>
             <Text style={s.feltLabel}>PRIMÆRE MUSKLER</Text>
-            <TextInput
-              style={s.input}
-              value={primerMuskler}
-              onChangeText={setPrimerMuskler}
-              placeholder="f.eks. Gluteus maximus, Gluteus medius"
-              placeholderTextColor={colors.muted2}
-            />
+            <TextInput style={s.input} value={primerMuskler} onChangeText={setPrimerMuskler} placeholder="f.eks. Gluteus maximus, Gluteus medius" placeholderTextColor={colors.muted2} />
             <Text style={s.inputHint}>Kommaseparer flere muskler</Text>
           </View>
 
           <View style={s.feltGruppe}>
             <Text style={s.feltLabel}>SEKUNDÆRE MUSKLER</Text>
-            <TextInput
-              style={s.input}
-              value={sekundarMuskler}
-              onChangeText={setSekundarMuskler}
-              placeholder="f.eks. Transversus abdominis, Erector spinae"
-              placeholderTextColor={colors.muted2}
-            />
+            <TextInput style={s.input} value={sekundarMuskler} onChangeText={setSekundarMuskler} placeholder="f.eks. Transversus abdominis, Erector spinae" placeholderTextColor={colors.muted2} />
             <Text style={s.inputHint}>Kommaseparer flere muskler</Text>
           </View>
 
-          {/* Akt */}
           <View style={s.feltGruppe}>
             <Text style={s.feltLabel}>AKT</Text>
             <View style={s.chipRad}>
@@ -430,114 +379,93 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
             </View>
           </View>
 
-          {/* Formål */}
+          {/* Variant-info */}
+          <View style={s.seksjonDivider}>
+            <Text style={s.feltLabel}>VARIANT OG INSTRUKSJON</Text>
+          </View>
+
           <View style={s.feltGruppe}>
-            <View style={s.formaalHeader}>
-              <Text style={s.feltLabel}>FORMÅL OG VARIANTER</Text>
-              <TouchableOpacity onPress={leggTilFormaal}>
-                <Text style={s.leggTilFormaal}>+ Legg til</Text>
+            <Text style={s.feltLabelLiten}>FORMÅL-LABEL</Text>
+            <TextInput
+              style={s.input}
+              value={formaalLabel}
+              onChangeText={setFormaalLabel}
+              placeholder="f.eks. Aktivering, Stabilitet, Mobilitet"
+              placeholderTextColor={colors.muted2}
+            />
+          </View>
+
+          <View style={s.feltGruppe}>
+            <Text style={s.feltLabelLiten}>INSTRUKSJON FOR BRUKER</Text>
+            <TextInput
+              style={[s.input, s.inputMultilinje]}
+              value={instruksjon}
+              onChangeText={setInstruksjon}
+              placeholder="Steg-for-steg instruksjon brukeren ser under økten..."
+              placeholderTextColor={colors.muted2}
+              multiline
+            />
+          </View>
+
+          <View style={s.feltGruppe}>
+            <Text style={s.feltLabelLiten}>TRACKING-TYPER (velg én eller flere)</Text>
+            <View style={s.trackingGrid}>
+              {TRACKING_TYPER.map(t => {
+                const aktiv = trackingTypes.includes(t.id);
+                return (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[s.trackingChip, aktiv && s.trackingChipAktiv]}
+                    onPress={() => toggleTrackingType(t.id)}
+                  >
+                    <Text style={[s.trackingChipTekst, aktiv && s.trackingChipTekstAktiv]}>
+                      {t.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {trackingTypes.includes('sets_reps_weight') && (
+            <View style={s.feltGruppe}>
+              <Text style={s.feltLabelLiten}>MOTSTANDSTYPE</Text>
+              <View style={s.chipRad}>
+                {MOTSTAND_TYPER.map(t => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[s.chip, motstandsType.includes(t) && s.chipAktivGreen]}
+                    onPress={() => toggleMotstand(t)}
+                  >
+                    <Text style={[s.chipTekst, motstandsType.includes(t) && s.chipTekstAktiv]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <View style={s.feltGruppe}>
+            <View style={s.aiNotatHeader}>
+              <Text style={s.feltLabelLiten}>KLINISK NOTAT (kun for AI)</Text>
+              <TouchableOpacity
+                style={[s.aiKnapp, generererNotat && s.aiKnappDisabled]}
+                onPress={genererAINotat}
+                disabled={generererNotat}
+              >
+                {generererNotat
+                  ? <ActivityIndicator size="small" color={colors.green} />
+                  : <Text style={s.aiKnappTekst}>✦ Generer</Text>
+                }
               </TouchableOpacity>
             </View>
-
-            {formaal.map((f, i) => (
-              <View key={f.id} style={s.formaalKort}>
-                <View style={s.formaalKortHeader}>
-                  <Text style={s.formaalKortTittel}>
-                    {f.label ? f.label : `Formål ${i + 1}`}
-                  </Text>
-                  {formaal.length > 1 && (
-                    <TouchableOpacity onPress={() => fjernFormaal(i)}>
-                      <Text style={s.fjernFormaal}>Fjern</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {/* Formål-navn */}
-                <TextInput
-                  style={s.input}
-                  value={f.label}
-                  onChangeText={v => oppdaterFormaal(i, 'label', v)}
-                  placeholder="Navn (f.eks. Aktivering, Sirkulasjon)"
-                  placeholderTextColor={colors.muted2}
-                />
-
-                {/* Brukerinstruksjon */}
-                <Text style={s.feltLabelLiten}>INSTRUKSJON FOR BRUKER</Text>
-                <TextInput
-                  style={[s.input, s.inputMultilinje]}
-                  value={f.instruction}
-                  onChangeText={v => oppdaterFormaal(i, 'instruction', v)}
-                  placeholder="Steg-for-steg instruksjon brukeren ser under økten..."
-                  placeholderTextColor={colors.muted2}
-                  multiline
-                />
-
-                {/* Tracking-typer – multi-select */}
-                <Text style={s.feltLabelLiten}>TRACKING-TYPER (velg én eller flere)</Text>
-                <View style={s.trackingGrid}>
-                  {TRACKING_TYPER.map(t => {
-                    const aktiv = (f.tracking_types || []).includes(t.id);
-                    return (
-                      <TouchableOpacity
-                        key={t.id}
-                        style={[s.trackingChip, aktiv && s.trackingChipAktiv]}
-                        onPress={() => toggleTrackingType(i, t.id)}
-                      >
-                        <Text style={[s.trackingChipTekst, aktiv && s.trackingChipTekstAktiv]}>
-                          {t.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Motstandstype – kun hvis sets_reps_weight er valgt */}
-                {(f.tracking_types || []).includes('sets_reps_weight') && (
-                  <View style={s.motstandSeksjon}>
-                    <Text style={s.feltLabelLiten}>MOTSTANDSTYPE</Text>
-                    <View style={s.chipRad}>
-                      {MOTSTAND_TYPER.map(t => (
-                        <TouchableOpacity
-                          key={t}
-                          style={[s.chip, (f.motstandsType || []).includes(t) && s.chipAktivGreen]}
-                          onPress={() => toggleMotstand(i, t)}
-                        >
-                          <Text style={[s.chipTekst, (f.motstandsType || []).includes(t) && s.chipTekstAktiv]}>
-                            {t}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* AI klinisk notat */}
-                <View style={s.aiNotatSeksjon}>
-                  <View style={s.aiNotatHeader}>
-                    <Text style={s.feltLabelLiten}>KLINISK NOTAT (kun for AI)</Text>
-                    <TouchableOpacity
-                      style={[s.aiKnapp, generererNotat[i] && s.aiKnappDisabled]}
-                      onPress={() => genererAINotat(i)}
-                      disabled={generererNotat[i]}
-                    >
-                      {generererNotat[i]
-                        ? <ActivityIndicator size="small" color={colors.green} />
-                        : <Text style={s.aiKnappTekst}>✦ Generer</Text>
-                      }
-                    </TouchableOpacity>
-                  </View>
-                  <TextInput
-                    style={[s.input, s.inputMultilinje, s.aiInput]}
-                    value={f.kliniskNotat}
-                    onChangeText={v => oppdaterFormaal(i, 'kliniskNotat', v)}
-                    placeholder="Trykk 'Generer' for å la AI skrive dette basert på instruksjon og muskler – eller skriv selv."
-                    placeholderTextColor={colors.muted2}
-                    multiline
-                  />
-                </View>
-
-              </View>
-            ))}
+            <TextInput
+              style={[s.input, s.inputMultilinje, s.aiInput]}
+              value={kliniskNotat}
+              onChangeText={setKliniskNotat}
+              placeholder="Trykk 'Generer' for å la AI skrive dette – eller skriv selv."
+              placeholderTextColor={colors.muted2}
+              multiline
+            />
           </View>
 
         </ScrollView>
@@ -545,7 +473,6 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
     );
   }
 
-  // Øvelsesliste
   const alleKroppsdeler = ['Alle', ...Array.from(new Set(ovelser.flatMap(o => o.bodyParts || []))).sort()];
 
   function filtrerte() {
@@ -589,7 +516,6 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
         <View style={s.center}><ActivityIndicator color={colors.accent} /></View>
       ) : (
         <>
-          {/* Søk */}
           <View style={s.sokWrapper}>
             <TextInput
               style={s.sokInput}
@@ -601,7 +527,6 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
             <Text style={s.antallTekst}>{antallFiltrert} av {ovelser.length}</Text>
           </View>
 
-          {/* Kroppsdel-filter */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroll} contentContainerStyle={s.filterInner}>
             {alleKroppsdeler.map(k => (
               <TouchableOpacity
@@ -640,10 +565,10 @@ Svar kun med selve notatet, ingen overskrifter eller forklaringer.`;
                         <View style={s.ovelseInfo}>
                           <Text style={s.ovelseNavn}>{o.name}</Text>
                           <Text style={s.ovelseMeta}>
+                            {o.formaalLabel ? `${o.formaalLabel} · ` : ''}
                             {o.muskelgrupper?.primer?.length
                               ? o.muskelgrupper.primer.slice(0, 2).join(', ')
                               : (o.bodyParts || []).join(', ')}
-                            {o.purposes?.length ? ` · ${o.purposes.length} formål` : ''}
                             {o.act?.length ? ` · Akt ${o.act.join('/')}` : ''}
                           </Text>
                         </View>
@@ -671,7 +596,6 @@ const s = StyleSheet.create({
   lagreKnapp: { fontSize: 13, color: colors.accent, fontWeight: '600', width: 60, textAlign: 'right' },
   inner: { padding: 16, paddingBottom: 40, gap: 16 },
   formInner: { padding: 16, paddingBottom: 80, gap: 18 },
-
   feltGruppe: { gap: 8 },
   radFelter: { flexDirection: 'row', gap: 12 },
   uploadKnapp: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, padding: 12, alignItems: 'center' },
@@ -681,45 +605,29 @@ const s = StyleSheet.create({
   feltLabel: { fontSize: 11, color: colors.muted, fontWeight: '500', letterSpacing: 1.0 },
   feltLabelLiten: { fontSize: 10, color: colors.muted2, fontWeight: '500', letterSpacing: 0.6 },
   inputHint: { fontSize: 11, color: colors.muted2, fontWeight: '300' },
-
   input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, padding: 11, fontSize: 14, color: colors.text },
   inputMultilinje: { minHeight: 80, textAlignVertical: 'top' },
   aiInput: { minHeight: 70, borderColor: colors.greenBorder, backgroundColor: colors.greenDim },
-
   chipRad: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.surface },
   chipAktiv: { backgroundColor: colors.surface2, borderColor: colors.accent },
   chipAktivGreen: { backgroundColor: colors.greenDim, borderColor: colors.greenBorder },
   chipTekst: { fontSize: 13, color: colors.muted },
   chipTekstAktiv: { color: colors.text },
-
-  formaalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  leggTilFormaal: { fontSize: 13, color: colors.green, fontWeight: '500' },
-
-  formaalKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 14, gap: 10, marginTop: 4 },
-  formaalKortHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  formaalKortTittel: { fontSize: 13, color: colors.text, fontWeight: '500' },
-  fjernFormaal: { fontSize: 12, color: colors.danger },
-
+  seksjonDivider: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 },
   trackingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   trackingChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.surface2 },
   trackingChipAktiv: { backgroundColor: colors.greenDim, borderColor: colors.greenBorder },
   trackingChipTekst: { fontSize: 12, color: colors.muted },
   trackingChipTekstAktiv: { color: colors.green, fontWeight: '500' },
-
-  motstandSeksjon: { gap: 8, paddingTop: 4 },
-
-  aiNotatSeksjon: { gap: 6 },
   aiNotatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   aiKnapp: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.greenDim, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
   aiKnappDisabled: { opacity: 0.5 },
   aiKnappTekst: { fontSize: 12, color: colors.green, fontWeight: '500' },
-
   tomKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 24, alignItems: 'center', gap: 14 },
   tomTekst: { fontSize: 14, color: colors.muted, fontWeight: '400' },
   btnPrimary: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 11, paddingHorizontal: 24 },
   btnPrimaryTekst: { color: colors.bg, fontSize: 14, fontWeight: '600' },
-
   sokWrapper: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   sokInput: { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, padding: 9, fontSize: 14, color: colors.text },
   antallTekst: { fontSize: 12, color: colors.muted2, fontWeight: '300', minWidth: 40, textAlign: 'right' },
@@ -731,7 +639,6 @@ const s = StyleSheet.create({
   filterTekstAktiv: { color: colors.bg },
   gruppe: { gap: 8 },
   gruppeTittel: { fontSize: 10, color: colors.muted, fontWeight: '500', letterSpacing: 0.8 },
-
   kort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, overflow: 'hidden' },
   ovelseRad: { flexDirection: 'row', alignItems: 'center', padding: 14 },
   ovelseRadBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
