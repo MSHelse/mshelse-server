@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  SafeAreaView, ActivityIndicator, Alert
+  SafeAreaView, ActivityIndicator
 } from 'react-native';
 import { collection, query, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../services/firebase';
@@ -29,6 +29,7 @@ export default function ProgramScreen({ navigation }: any) {
   const [laster, setLaster] = useState(true);
   const [programmer, setProgrammer] = useState<any[]>([]);
   const [sisteAssessment, setSisteAssessment] = useState<any>(null);
+  const [bekreftSlettId, setBekreftSlettId] = useState<string | null>(null);
 
   useEffect(() => { hentData(); }, []);
   useEffect(() => {
@@ -50,18 +51,14 @@ export default function ProgramScreen({ navigation }: any) {
     finally { setLaster(false); }
   }
 
-  async function slettProgram(p: any) {
+  async function bekreftOgSlett(id: string) {
     const user = auth.currentUser;
     if (!user) return;
-    Alert.alert('Slett program', `Vil du slette "${p.tittel}"? Dette kan ikke angres.`, [
-      { text: 'Avbryt', style: 'cancel' },
-      { text: 'Slett', style: 'destructive', onPress: async () => {
-        try {
-          await deleteDoc(doc(db, 'users', user.uid, 'programs', p.id));
-          await hentData();
-        } catch (e) { console.error(e); }
-      }},
-    ]);
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'programs', id));
+      setBekreftSlettId(null);
+      await hentData();
+    } catch (e) { console.error(e); }
   }
 
   const aktiveProgrammer = programmer.filter(p => p.aktiv);
@@ -139,6 +136,7 @@ export default function ProgramScreen({ navigation }: any) {
                 const fremgang = p.okterTotalt > 0
                   ? Math.min(100, Math.round((p.okterFullfort / p.okterTotalt) * 100)) : 0;
                 const pFarge = p.akt ? AKT_FARGE[p.akt] : null;
+                const visBekreft = bekreftSlettId === p.id;
                 return (
                   <View key={p.id} style={[s.programKort, i < aktiveProgrammer.length - 1 && s.programKortBorder]}>
                     <TouchableOpacity onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}>
@@ -171,17 +169,29 @@ export default function ProgramScreen({ navigation }: any) {
                         </View>
                       )}
                     </TouchableOpacity>
-                    <View style={s.programKnapper}>
-                      <TouchableOpacity style={[s.btnPrimary, { flex: 1 }]} onPress={() => navigation.navigate('AktivOkt', { program: p, assessment: sisteAssessment })}>
-                        <Text style={s.btnPrimaryTekst}>Start økt</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={s.btnSekundar} onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}>
-                        <Text style={s.btnSekundarTekst}>Detaljer</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={s.btnSlett} onPress={() => slettProgram(p)}>
-                        <Text style={s.btnSlettTekst}>🗑</Text>
-                      </TouchableOpacity>
-                    </View>
+                    {visBekreft ? (
+                      <View style={s.bekreftRad}>
+                        <Text style={s.bekreftTekst}>Slette «{p.tittel}»?</Text>
+                        <TouchableOpacity style={s.btnBekreftSlett} onPress={() => bekreftOgSlett(p.id)}>
+                          <Text style={s.btnBekreftSlettTekst}>Slett</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.btnAvbryt} onPress={() => setBekreftSlettId(null)}>
+                          <Text style={s.btnAvbrytTekst}>Avbryt</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={s.programKnapper}>
+                        <TouchableOpacity style={[s.btnPrimary, { flex: 1 }]} onPress={() => navigation.navigate('AktivOkt', { program: p, assessment: sisteAssessment })}>
+                          <Text style={s.btnPrimaryTekst}>Start økt</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.btnSekundar} onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}>
+                          <Text style={s.btnSekundarTekst}>Detaljer</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.btnSlett} onPress={() => setBekreftSlettId(p.id)}>
+                          <Text style={s.btnSlettTekst}>Slett</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 );
               })}
@@ -203,25 +213,40 @@ export default function ProgramScreen({ navigation }: any) {
           <View style={s.seksjon}>
             <Text style={s.seksjonTittel}>ARKIVERTE PROGRAMMER</Text>
             <View style={s.kortListe}>
-              {arkiverte.map((p, i) => (
-                <View key={p.id} style={[s.programKort, s.programKortDimmet, i < arkiverte.length - 1 && s.programKortBorder]}>
-                  <TouchableOpacity style={s.programKortTopp} onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}>
-                    <View style={s.programKortInfo}>
-                      <Text style={s.programTittelDimmet}>{p.tittel}</Text>
-                      <Text style={s.programMeta}>
-                        {p.uker ? `${p.uker} uker · ` : ''}
-                        {p.ovelser?.length ? `${p.ovelser.length} øvelser` : ''}
-                      </Text>
-                      {p.opprettet && <Text style={s.datoTekst}>Startet {formaterDato(p.opprettet)}</Text>}
-                    </View>
-                  </TouchableOpacity>
-                  <View style={[s.programKnapper, { borderTopWidth: 0, paddingTop: 0 }]}>
-                    <TouchableOpacity style={s.btnSlett} onPress={() => slettProgram(p)}>
-                      <Text style={s.btnSlettTekst}>🗑 Slett</Text>
+              {arkiverte.map((p, i) => {
+                const visBekreft = bekreftSlettId === p.id;
+                return (
+                  <View key={p.id} style={[s.programKort, s.programKortDimmet, i < arkiverte.length - 1 && s.programKortBorder]}>
+                    <TouchableOpacity style={s.programKortTopp} onPress={() => navigation.navigate('ProgramDetalj', { program: p, assessment: sisteAssessment })}>
+                      <View style={s.programKortInfo}>
+                        <Text style={s.programTittelDimmet}>{p.tittel}</Text>
+                        <Text style={s.programMeta}>
+                          {p.uker ? `${p.uker} uker · ` : ''}
+                          {p.ovelser?.length ? `${p.ovelser.length} øvelser` : ''}
+                        </Text>
+                        {p.opprettet && <Text style={s.datoTekst}>Startet {formaterDato(p.opprettet)}</Text>}
+                      </View>
                     </TouchableOpacity>
+                    {visBekreft ? (
+                      <View style={s.bekreftRad}>
+                        <Text style={s.bekreftTekst}>Slette «{p.tittel}»?</Text>
+                        <TouchableOpacity style={s.btnBekreftSlett} onPress={() => bekreftOgSlett(p.id)}>
+                          <Text style={s.btnBekreftSlettTekst}>Slett</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.btnAvbryt} onPress={() => setBekreftSlettId(null)}>
+                          <Text style={s.btnAvbrytTekst}>Avbryt</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={[s.programKnapper, { borderTopWidth: 0, paddingTop: 0 }]}>
+                        <TouchableOpacity style={s.btnSlett} onPress={() => setBekreftSlettId(p.id)}>
+                          <Text style={s.btnSlettTekst}>Slett</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </View>
         )}
@@ -278,7 +303,13 @@ const s = StyleSheet.create({
   btnSekundar: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, padding: 11, paddingHorizontal: 16, alignItems: 'center' },
   btnSekundarTekst: { color: colors.muted, fontSize: 14, fontWeight: '400' },
   btnSlett: { backgroundColor: colors.dangerDim, borderWidth: 1, borderColor: colors.dangerBorder, borderRadius: 8, padding: 11, paddingHorizontal: 14, alignItems: 'center' },
-  btnSlettTekst: { color: colors.danger, fontSize: 13 },
+  btnSlettTekst: { color: colors.danger, fontSize: 13, fontWeight: '500' },
+  bekreftRad: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.dangerBorder, backgroundColor: colors.dangerDim },
+  bekreftTekst: { flex: 1, fontSize: 12, color: colors.danger, fontWeight: '400' },
+  btnBekreftSlett: { backgroundColor: colors.danger, borderRadius: 7, paddingHorizontal: 14, paddingVertical: 8 },
+  btnBekreftSlettTekst: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  btnAvbryt: { paddingHorizontal: 12, paddingVertical: 8 },
+  btnAvbrytTekst: { color: colors.muted, fontSize: 13, fontWeight: '400' },
   ingenKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 24, alignItems: 'center', gap: 12 },
   ingenTittel: { fontSize: 16, fontWeight: '400', color: colors.text },
   ingenSub: { fontSize: 13, color: colors.muted, fontWeight: '300', textAlign: 'center', lineHeight: 20 },

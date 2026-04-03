@@ -24,6 +24,34 @@ const TYPE_TIL_KATEGORI: Record<string, string> = {
 
 const RADAR_KATEGORIER = ['Aktivering', 'Stabilitet', 'Mobilitet', 'Styrke', 'Utholdenhet'];
 
+function getMandagIUken(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const dag = d.getDay();
+  d.setDate(d.getDate() + (dag === 0 ? -6 : 1 - dag));
+  return d;
+}
+
+function grupperLoggerPerUke(logger: any[]): { label: string; logger: any[]; fullfort: number }[] {
+  const dagensMandag = getMandagIUken(new Date());
+  const ukeMap = new Map<number, any[]>();
+  logger.forEach(l => {
+    const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+    const logMandag = getMandagIUken(dato);
+    const ukeNr = Math.round((dagensMandag.getTime() - logMandag.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    if (ukeNr < 0 || ukeNr > 7) return;
+    if (!ukeMap.has(ukeNr)) ukeMap.set(ukeNr, []);
+    ukeMap.get(ukeNr)!.push(l);
+  });
+  return Array.from(ukeMap.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([ukeNr, logs]) => ({
+      label: ukeNr === 0 ? 'DENNE UKEN' : ukeNr === 1 ? 'FORRIGE UKE' : `${ukeNr} UKER SIDEN`,
+      logger: logs,
+      fullfort: logs.filter(l => l.fullfort).length,
+    }));
+}
+
 export default function TrackingScreen({ navigation }: any) {
   const [laster, setLaster] = useState(true);
   const [logger, setLogger] = useState<any[]>([]);
@@ -416,72 +444,84 @@ export default function TrackingScreen({ navigation }: any) {
               <Text style={s.tomSub}>Start en økt fra Program-fanen</Text>
             </View>
           ) : (
-            <View style={s.loggListe}>
-              {logger.slice(0, 15).map((l, i) => {
-                const erEkspandert = ekspandert.has(l.id);
-                const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
-                return (
-                  <View key={l.id} style={[s.loggRad, i < Math.min(logger.length, 15) - 1 && s.loggRadBorder]}>
-                    <TouchableOpacity
-                      style={s.loggHeader}
-                      onPress={() => setEkspandert(prev => {
-                        const ny = new Set(prev);
-                        ny.has(l.id) ? ny.delete(l.id) : ny.add(l.id);
-                        return ny;
-                      })}
-                    >
-                      <View style={[s.loggIkon, l.fullfort ? s.loggIkonFullfort : s.loggIkonHoppet]} />
-                      <View style={s.loggInfo}>
-                        <Text style={s.loggNavn}>{l.programTittel || 'Økt'}</Text>
-                        <Text style={s.loggMeta}>
-                          {dato.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}
-                          {l.smerte != null ? ` · Smerte ${l.smerte}/10` : ''}
-                        </Text>
-                        {l.notat ? <Text style={s.loggNotat}>"{l.notat}"</Text> : null}
-                      </View>
-                      <View style={[s.loggStatus, l.fullfort ? s.loggStatusFullfort : s.loggStatusHoppet]}>
-                        <Text style={[s.loggStatusTekst, l.fullfort ? s.loggStatusTekstF : s.loggStatusTekstH]}>
-                          {l.fullfort ? 'Fullført' : 'Hoppet'}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    {erEkspandert && (l.ovelser || []).length > 0 && (
-                      <View style={s.loggDetaljer}>
-                        {(l.ovelser || []).map((o: any, j: number) => {
-                          const spark = sparklineForOvelse(o.navn);
-                          const sett = (o.sett || []);
-                          return (
-                            <View key={j} style={s.loggOvelseRad}>
-                              <View style={s.loggOvelseHeader}>
-                                {spark.length > 1 && (
-                                  <Sparkline data={spark} farge={colors.green} />
-                                )}
-                                <Text style={s.loggOvelseNavn}>{o.navn}</Text>
-                              </View>
-                              <View style={s.settBrikker}>
-                                {sett.map((s2: any, k: number) => {
-                                  const verdier = Object.values(s2.verdier || {}).filter((v: any) => typeof v === 'number') as number[];
-                                  const visVerdi = verdier.length > 0
-                                    ? Math.round(verdier.reduce((a, b) => a + b, 0) / verdier.length * 10) / 10
-                                    : null;
-                                  return (
-                                    <View key={k} style={[s.settBrikke, s2.hoppetOver && s.settBrikkeHoppet]}>
-                                      <Text style={[s.settBrikkeTekst, s2.hoppetOver && s.settBrikkeTekstHoppet]}>
-                                        {s2.hoppetOver ? '–' : visVerdi != null ? visVerdi : '✓'}
-                                      </Text>
-                                    </View>
-                                  );
-                                })}
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    )}
+            <View style={{ gap: 12 }}>
+              {grupperLoggerPerUke(logger).map(uke => (
+                <View key={uke.label}>
+                  <View style={s.loggUkeHeader}>
+                    <Text style={s.loggUkeLabel}>{uke.label}</Text>
+                    <Text style={s.loggUkeCompliance}>
+                      {uke.fullfort} av {uke.logger.length} fullført
+                    </Text>
                   </View>
-                );
-              })}
+                  <View style={s.loggListe}>
+                    {uke.logger.map((l, i) => {
+                      const erEkspandert = ekspandert.has(l.id);
+                      const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+                      return (
+                        <View key={l.id} style={[s.loggRad, i < uke.logger.length - 1 && s.loggRadBorder]}>
+                          <TouchableOpacity
+                            style={s.loggHeader}
+                            onPress={() => setEkspandert(prev => {
+                              const ny = new Set(prev);
+                              ny.has(l.id) ? ny.delete(l.id) : ny.add(l.id);
+                              return ny;
+                            })}
+                          >
+                            <View style={[s.loggIkon, l.fullfort ? s.loggIkonFullfort : s.loggIkonHoppet]} />
+                            <View style={s.loggInfo}>
+                              <Text style={s.loggNavn}>{l.programTittel || 'Økt'}</Text>
+                              <Text style={s.loggMeta}>
+                                {dato.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                {l.smerte != null ? ` · Smerte ${l.smerte}/10` : ''}
+                              </Text>
+                              {l.notat ? <Text style={s.loggNotat}>"{l.notat}"</Text> : null}
+                            </View>
+                            <View style={[s.loggStatus, l.fullfort ? s.loggStatusFullfort : s.loggStatusHoppet]}>
+                              <Text style={[s.loggStatusTekst, l.fullfort ? s.loggStatusTekstF : s.loggStatusTekstH]}>
+                                {l.fullfort ? 'Fullført' : 'Hoppet'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+
+                          {erEkspandert && (l.ovelser || []).length > 0 && (
+                            <View style={s.loggDetaljer}>
+                              {(l.ovelser || []).map((o: any, j: number) => {
+                                const spark = sparklineForOvelse(o.navn);
+                                const sett = (o.sett || []);
+                                return (
+                                  <View key={j} style={s.loggOvelseRad}>
+                                    <View style={s.loggOvelseHeader}>
+                                      {spark.length > 1 && (
+                                        <Sparkline data={spark} farge={colors.green} />
+                                      )}
+                                      <Text style={s.loggOvelseNavn}>{o.navn}</Text>
+                                    </View>
+                                    <View style={s.settBrikker}>
+                                      {sett.map((s2: any, k: number) => {
+                                        const verdier = Object.values(s2.verdier || {}).filter((v: any) => typeof v === 'number') as number[];
+                                        const visVerdi = verdier.length > 0
+                                          ? Math.round(verdier.reduce((a, b) => a + b, 0) / verdier.length * 10) / 10
+                                          : null;
+                                        return (
+                                          <View key={k} style={[s.settBrikke, s2.hoppetOver && s.settBrikkeHoppet]}>
+                                            <Text style={[s.settBrikkeTekst, s2.hoppetOver && s.settBrikkeTekstHoppet]}>
+                                              {s2.hoppetOver ? '–' : visVerdi != null ? visVerdi : '✓'}
+                                            </Text>
+                                          </View>
+                                        );
+                                      })}
+                                    </View>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -542,7 +582,7 @@ function RadarDiagram({ nå, før, kategorier }: { nå: Record<string, number>; 
   const cx = size / 2;
   const cy = size / 2;
   const r = size * 0.34;
-  const labelR = r + 24;
+  const labelR = r + 18;
   const n = kategorier.length;
 
   function punkt(verdi: number, index: number) {
@@ -841,6 +881,9 @@ const s = StyleSheet.create({
   gridLinje: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: colors.border },
   grafAkse: { fontSize: 9, color: colors.muted2, fontWeight: '300' },
 
+  loggUkeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingHorizontal: 2 },
+  loggUkeLabel: { fontSize: 10, color: colors.muted, fontWeight: '500', letterSpacing: 0.8 },
+  loggUkeCompliance: { fontSize: 11, color: colors.muted2, fontWeight: '300' },
   loggListe: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, overflow: 'hidden' },
   loggRad: { },
   loggRadBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },

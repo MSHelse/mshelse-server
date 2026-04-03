@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const Anthropic = require('@anthropic-ai/sdk');
+const admin = require('firebase-admin');
 
 const app = express();
 app.use(cors());
@@ -8,6 +9,31 @@ app.use(express.json());
 app.use(express.static('../'));
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Firebase Admin SDK
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId:   process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey:  process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
+}
+
+const ADMIN_UID = 'RpzuHdFg5heYMVHjC6F4IBPSrmq2';
+
+async function requireAdmin(req, res, next) {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Mangler token' });
+    const decoded = await admin.auth().verifyIdToken(token);
+    if (decoded.uid !== ADMIN_UID) return res.status(403).json({ error: 'Ikke admin' });
+    next();
+  } catch (e) {
+    res.status(401).json({ error: 'Ugyldig token' });
+  }
+}
 
 const SYSTEM = `Du er en klinisk kartlegger for MS Helse-appen, laget av Muskelspesialist Klinikken i Oslo. Du har 30 ars klinisk erfaring som fysioterapeut og manuellterapeut med bred kompetanse i muskel- og skjelettplager, rehabilitering, styrketrening og opptrening.
 
@@ -369,5 +395,202 @@ Neste steg: ${fraAssessment?.triage?.next_step || '–'}`;
   }
 });
 
+
+// ── ADMIN: Brukerliste ──────────────────────────────────────────────────────
+app.get('/api/admin/brukere', requireAdmin, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    const usersSnap = await db.collection('users').get();
+    const result = [];
+    const nå = Date.now();
+
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
+
+      let authUser = null;
+      try { authUser = await admin.auth().getUser(uid); } catch (e) {}
+
+      const loggerSnap = await db.collection(`users/${uid}/logger`)
+        .orderBy('dato', 'desc').limit(20).get();
+      const logger = loggerSnap.docs.map(d => d.data());
+
+      // Compliance siste 14 dager
+      const fjortenDagerSiden = new Date(nå - 14 * 24 * 60 * 60 * 1000);
+      const nylige = logger.filter(l => {
+        const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+        return dato > fjortenDagerSiden;
+      });
+      const compliance = nylige.length > 0
+        ? Math.round(nylige.filter(l => l.fullfort).length / nylige.length * 100)
+        : null;
+
+      const aktivSnap = await db.collection(`users/${uid}/programs`)
+        .where('aktiv', '==', true).limit(1).get();
+      const aktivtProgram = aktivSnap.docs[0]?.data() || null;
+
+      const sisteLogg = logger[0];
+      const sisteAktiv = sisteLogg?.dato
+        ? (sisteLogg.dato.toDate ? sisteLogg.dato.toDate() : new Date(sisteLogg.dato))
+        : null;
+      const sisteSmerte = logger.find(l => l.smerte != null)?.smerte ?? null;
+
+      result.push({
+        uid,
+        email:         authUser?.email || null,
+        displayName:   authUser?.displayName || null,
+        sisteAktiv:    sisteAktiv?.toISOString() || null,
+        compliance,
+        sisteSmerte,
+        aktivtProgram: aktivtProgram ? { tittel: aktivtProgram.tittel, akt: aktivtProgram.akt } : null,
+        antallLogger:  logger.length,
+      });
+    }
+
+    result.sort((a, b) => {
+      if (!a.sisteAktiv) return 1;
+      if (!b.sisteAktiv) return -1;
+      return new Date(b.sisteAktiv) - new Date(a.sisteAktiv);
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── ADMIN: Brukerdetalj ─────────────────────────────────────────────────────
+app.get('/api/admin/bruker/:uid', requireAdmin, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    const { uid } = req.params;
+
+    let authUser = null;
+    try { authUser = await admin.auth().getUser(uid); } catch (e) {}
+
+    const loggerSnap = await db.collection(`users/${uid}/logger`)
+      .orderBy('dato', 'asc').limit(60).get();
+    const logger = loggerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const assessmentsSnap = await db.collection(`users/${uid}/assessments`)
+      .orderBy('dato', 'desc').get();
+    const assessments = assessmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const programsSnap = await db.collection(`users/${uid}/programs`)
+      .orderBy('opprettet', 'desc').get();
+    const programmer = programsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    res.json({
+      email: authUser?.email || null,
+      displayName: authUser?.displayName || null,
+      logger, assessments, programmer,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── ADMIN: Statistikk ───────────────────────────────────────────────────────
+app.get('/api/admin/statistikk', requireAdmin, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    const usersSnap = await db.collection('users').get();
+    const totalBrukere = usersSnap.size;
+    const nå = Date.now();
+    const enUke = 7 * 24 * 60 * 60 * 1000;
+    const tredveDager = 30 * 24 * 60 * 60 * 1000;
+    const fjortenDager = 14 * 24 * 60 * 60 * 1000;
+
+    let aktiveUke = 0, aktive30 = 0, inaktive14 = 0;
+    let totalLogger = 0, fullfortLogger = 0;
+    let c30Logger = 0, c30Fullfort = 0;
+    const smerteStart = [], smerteNaa = [];
+    const aktFordeling = { 1: 0, 2: 0, 3: 0 };
+    let antallReassessments = 0, antallAktProgresjon = 0;
+    const ovelseCount = {};
+
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
+
+      const loggerSnap = await db.collection(`users/${uid}/logger`)
+        .orderBy('dato', 'desc').limit(100).get();
+      const logger = loggerSnap.docs.map(d => d.data());
+
+      totalLogger += logger.length;
+      fullfortLogger += logger.filter(l => l.fullfort).length;
+
+      if (logger.length > 0) {
+        const sisteDate = logger[0].dato?.toDate ? logger[0].dato.toDate() : new Date(logger[0].dato);
+        const diff = nå - sisteDate.getTime();
+        if (diff < enUke) aktiveUke++;
+        if (diff < tredveDager) aktive30++;
+        if (diff > fjortenDager) inaktive14++;
+      } else {
+        inaktive14++;
+      }
+
+      const tredveSiden = new Date(nå - tredveDager);
+      logger.forEach(l => {
+        const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+        if (dato > tredveSiden) {
+          c30Logger++;
+          if (l.fullfort) c30Fullfort++;
+        }
+        (l.ovelser || []).forEach(o => {
+          if (!o.exerciseId) return;
+          if (!ovelseCount[o.exerciseId]) ovelseCount[o.exerciseId] = { navn: o.navn, count: 0 };
+          ovelseCount[o.exerciseId].count++;
+        });
+      });
+
+      const sisteSmerte = logger.find(l => l.smerte != null)?.smerte ?? null;
+      if (sisteSmerte != null) smerteNaa.push(sisteSmerte);
+
+      const assessmentsSnap = await db.collection(`users/${uid}/assessments`)
+        .orderBy('dato', 'asc').get();
+      const assessments = assessmentsSnap.docs.map(d => d.data());
+      if (assessments.length > 0) {
+        const p = assessments[0].triage?.pain_level;
+        if (p != null) smerteStart.push(p);
+      }
+      antallReassessments += assessments.filter(a => a.type === 'reassessment').length;
+      if (assessments.some(a => a.type === 'reassessment' &&
+        ['neste_akt', 'intensiver'].includes(a.konklusjon))) antallAktProgresjon++;
+
+      const aktivSnap = await db.collection(`users/${uid}/programs`)
+        .where('aktiv', '==', true).limit(1).get();
+      if (!aktivSnap.empty) {
+        const akt = aktivSnap.docs[0].data().akt;
+        if (akt && aktFordeling[akt] !== undefined) aktFordeling[akt]++;
+      }
+    }
+
+    const avg = arr => arr.length > 0
+      ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length * 10) / 10 : null;
+
+    const snittSmerteStart = avg(smerteStart);
+    const snittSmerteNaa   = avg(smerteNaa);
+
+    res.json({
+      totalBrukere,
+      aktiveUke,
+      aktive30,
+      inaktive14,
+      totalLogger,
+      snittCompliance:   totalLogger > 0 ? Math.round(fullfortLogger / totalLogger * 100) : 0,
+      snittCompliance30: c30Logger > 0 ? Math.round(c30Fullfort / c30Logger * 100) : 0,
+      snittSmerteStart,
+      snittSmerteNaa,
+      snittReduksjon: (snittSmerteStart != null && snittSmerteNaa != null)
+        ? Math.round((snittSmerteStart - snittSmerteNaa) * 10) / 10 : null,
+      aktFordeling,
+      antallReassessments,
+      antallAktProgresjon,
+      toppOvelser: Object.values(ovelseCount)
+        .sort((a, b) => b.count - a.count).slice(0, 10),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.listen(3000, () => console.log('Server kjorer pa port 3000'));

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  SafeAreaView, ActivityIndicator, Alert
+  SafeAreaView, ActivityIndicator
 } from 'react-native';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../services/firebase';
@@ -36,6 +36,7 @@ export default function ProgramDetaljScreen({ navigation, route }: any) {
   const assessment = route?.params?.assessment || null;
   const [ovelseData, setOvelseData] = useState<Record<string, any>>({});
   const [laster, setLaster] = useState(true);
+  const [visBekreftSlett, setVisBekreftSlett] = useState(false);
 
   useEffect(() => { hentOvelseData(); }, []);
 
@@ -51,18 +52,13 @@ export default function ProgramDetaljScreen({ navigation, route }: any) {
     finally { setLaster(false); }
   }
 
-  async function slettProgram() {
+  async function bekreftOgSlett() {
     const user = auth.currentUser;
     if (!user || !program?.id) return;
-    Alert.alert('Slett program', `Vil du slette "${program.tittel}"? Dette kan ikke angres.`, [
-      { text: 'Avbryt', style: 'cancel' },
-      { text: 'Slett', style: 'destructive', onPress: async () => {
-        try {
-          await deleteDoc(doc(db, 'users', user.uid, 'programs', program.id));
-          navigation.goBack();
-        } catch (e) { console.error(e); }
-      }},
-    ]);
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'programs', program.id));
+      navigation.goBack();
+    } catch (e) { console.error(e); }
   }
 
   if (!program) return (
@@ -171,17 +167,29 @@ export default function ProgramDetaljScreen({ navigation, route }: any) {
 
       </ScrollView>
 
-      <View style={s.bunntBar}>
-        <TouchableOpacity style={s.btnSlett} onPress={slettProgram}>
-          <Text style={s.btnSlettTekst}>🗑</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.btnSekundar} onPress={() => navigation.navigate('ProgramBuilder', { program })}>
-          <Text style={s.btnSekundarTekst}>Rediger</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.btnPrimary, { flex: 1 }]} onPress={() => navigation.navigate('AktivOkt', { program, assessment })}>
-          <Text style={s.btnPrimaryTekst}>Start økt</Text>
-        </TouchableOpacity>
-      </View>
+      {visBekreftSlett ? (
+        <View style={s.bekreftBar}>
+          <Text style={s.bekreftTekst}>Slette «{program.tittel}»?</Text>
+          <TouchableOpacity style={s.btnBekreftSlett} onPress={bekreftOgSlett}>
+            <Text style={s.btnBekreftSlettTekst}>Slett</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.btnAvbryt} onPress={() => setVisBekreftSlett(false)}>
+            <Text style={s.btnAvbrytTekst}>Avbryt</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={s.bunntBar}>
+          <TouchableOpacity style={s.btnSlett} onPress={() => setVisBekreftSlett(true)}>
+            <Text style={s.btnSlettTekst}>Slett</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.btnSekundar} onPress={() => navigation.navigate('ProgramBuilder', { program })}>
+            <Text style={s.btnSekundarTekst}>Rediger</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.btnPrimary, { flex: 1 }]} onPress={() => navigation.navigate('AktivOkt', { program, assessment })}>
+            <Text style={s.btnPrimaryTekst}>Start økt</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -198,6 +206,7 @@ const s = StyleSheet.create({
   aktBadgeTekst: { fontSize: 11, fontWeight: '600', letterSpacing: 0.4 },
   tittel: { fontSize: 24, fontWeight: '300', color: colors.text, lineHeight: 32 },
   meta: { fontSize: 13, color: colors.muted, fontWeight: '300' },
+  datoTekst: { fontSize: 11, color: colors.muted2, fontWeight: '300' },
   fremdriftSeksjon: { gap: 8 },
   fremdriftHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   fremdriftProsent: { fontSize: 13, color: colors.green, fontWeight: '500' },
@@ -221,11 +230,16 @@ const s = StyleSheet.create({
   ovelseMetaTekst: { fontSize: 12, color: colors.muted2, fontWeight: '300' },
   ovelseType: { fontSize: 11, color: colors.green, fontWeight: '400' },
   bunntBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: 10, padding: 16, paddingBottom: 28, backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.border },
+  bekreftBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16, paddingBottom: 28, backgroundColor: colors.dangerDim, borderTopWidth: 1, borderTopColor: colors.dangerBorder },
+  bekreftTekst: { flex: 1, fontSize: 13, color: colors.danger, fontWeight: '400' },
+  btnBekreftSlett: { backgroundColor: colors.danger, borderRadius: 9, paddingHorizontal: 16, paddingVertical: 12 },
+  btnBekreftSlettTekst: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  btnAvbryt: { paddingHorizontal: 12, paddingVertical: 12 },
+  btnAvbrytTekst: { color: colors.muted, fontSize: 14, fontWeight: '400' },
   btnPrimary: { backgroundColor: colors.accent, borderRadius: 10, padding: 14, alignItems: 'center' },
   btnPrimaryTekst: { color: colors.bg, fontSize: 15, fontWeight: '600' },
   btnSekundar: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border2, borderRadius: 10, padding: 14, paddingHorizontal: 20, alignItems: 'center' },
   btnSekundarTekst: { color: colors.muted, fontSize: 14, fontWeight: '400' },
-  btnSlett: { backgroundColor: colors.dangerDim, borderWidth: 1, borderColor: colors.dangerBorder, borderRadius: 10, padding: 14, paddingHorizontal: 14, alignItems: 'center' },
-  btnSlettTekst: { color: colors.danger, fontSize: 15 },
-  datoTekst: { fontSize: 11, color: colors.muted2, fontWeight: '300' },
+  btnSlett: { backgroundColor: colors.dangerDim, borderWidth: 1, borderColor: colors.dangerBorder, borderRadius: 10, padding: 14, paddingHorizontal: 16, alignItems: 'center' },
+  btnSlettTekst: { color: colors.danger, fontSize: 14, fontWeight: '500' },
 });

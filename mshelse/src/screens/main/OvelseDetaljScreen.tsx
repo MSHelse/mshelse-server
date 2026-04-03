@@ -1,14 +1,51 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  SafeAreaView, Image
+  SafeAreaView, Modal,
 } from 'react-native';
 import VideoSpiller from '../../components/VideoSpiller';
+import AnatomyViewer from '../../components/AnatomyViewer';
 import { colors } from '../../theme/colors';
+
+const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> = {
+  1: { bg: colors.dangerDim, border: 'rgba(192,57,43,0.3)', tekst: colors.danger },
+  2: { bg: colors.yellowDim, border: colors.yellowBorder, tekst: colors.yellow },
+  3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
+};
+
+const AKT_FORKLARING: Record<number, string> = {
+  1: 'Kontroll og demping – beregnet for akutt og subakutt fase med smerter. Fokus på deaktivering, mobilisering og lavterskel aktivering.',
+  2: 'Rette opp – aktivering med progresjon. Adresserer kompensasjonsmønstre og bygger opp stabilitet og kontroll.',
+  3: 'Vokse – progressiv styrke og utholdenhet. For brukere uten aktive smerter som ønsker livslang trening.',
+};
+
+const TRACKING_LABEL: Record<string, string> = {
+  activation_quality: 'Kontaktkvalitet (0–10)',
+  contact_reps:       'Reps med god kontakt',
+  sets_reps:          'Sett/reps',
+  sets_reps_weight:   'Sett/reps/motstand',
+  mobility:           'Bevegelsesfølelse (0–10)',
+  rpe:                'Anstrengelse (RPE)',
+  side_diff:          'Sideforskjell (0–10)',
+  completed:          'Fullført',
+};
+
+const TRACKING_INFO: Record<string, { tittel: string; tekst: string; eksempel?: string }> = {
+  activation_quality: { tittel: 'Kontaktkvalitet', tekst: 'Hvor godt klarer du å aktivere riktig muskel uten at andre tar over?', eksempel: '3 = kjenner litt. 8 = tydelig isolert kontakt gjennom hele settet.' },
+  contact_reps: { tittel: 'Reps med god kontakt', tekst: 'Tell kun repsene der du kjenner at riktig muskel jobber. Stopp når en annen muskel tar over.', eksempel: '12 reps totalt, mister kontakt på rep 9 → logg 8.' },
+  rpe: { tittel: 'Anstrengelse (RPE)', tekst: 'Hvor hardt kjennes belastningen totalt etter settet?', eksempel: '1–3 = lett. 4–6 = moderat. 7–8 = hardt. 9–10 = nær maks.' },
+  mobility: { tittel: 'Bevegelsesfølelse', tekst: 'Hvordan oppleves bevegelsen? Fokuser på kvalitet – fri og smertefri, eller stiv og begrenset?', eksempel: '1–3 = stiv. 5–6 = noe friksjon. 8–10 = fri og smertefri.' },
+  side_diff: { tittel: 'Sideforskjell', tekst: 'Hvor stor er forskjellen mellom høyre og venstre side? 0 = ingen forskjell, 10 = stor forskjell.', eksempel: 'Venstre side føles halvparten så sterk → logg 5.' },
+  sets_reps: { tittel: 'Sett/reps', tekst: 'Standard sett- og repregistrering. Tell alle reps du fullfører.' },
+  sets_reps_weight: { tittel: 'Sett/reps/motstand', tekst: 'Registrer reps og vekt/motstand per sett.' },
+  completed: { tittel: 'Fullført', tekst: 'Marker settet som fullført uten detaljert tracking.' },
+};
 
 export default function OvelseDetaljScreen({ navigation, route }: any) {
   const ovelse = route?.params?.ovelse;
   const personligKontekst: string | null = route?.params?.personligKontekst || null;
+  const [visAktModal, setVisAktModal] = useState<number | null>(null);
+  const [visTrackingModal, setVisTrackingModal] = useState<string | null>(null);
   // Støtt både ny flat struktur og gammel purposes[]-struktur
   const instruksjonTekst: string = ovelse?.instruksjon || ovelse?.purposes?.[0]?.instruction || '';
   const formaalLabelTekst: string = ovelse?.formaalLabel || ovelse?.purposes?.[0]?.label || '';
@@ -67,38 +104,92 @@ export default function OvelseDetaljScreen({ navigation, route }: any) {
           </View>
         ) : null}
 
-        {ovelse.anatomyImageUrl && (
+        {/* Ny AnatomyViewer – bruker anatomi-feltet fra Firestore */}
+        {(ovelse.anatomi || ovelse.muskelgrupper) && (
           <View style={s.seksjon}>
             <Text style={s.seksjonTittel}>ANATOMI</Text>
-            <View style={s.anatomiWrapper}>
-              <Image
-                source={{ uri: ovelse.anatomyImageUrl }}
-                style={s.anatomiImage}
-                resizeMode="contain"
+            <View style={s.anatomiKort}>
+              <AnatomyViewer
+                anatomi={ovelse.anatomi || { anterior: [], posterior: [] }}
+                muskelgrupper={ovelse.muskelgrupper}
               />
             </View>
           </View>
         )}
 
-        {(ovelse.act || []).length > 0 && (
+        {((ovelse.act || []).length > 0 || (ovelse.tracking_types || ovelse.tracking_type)) && (
           <View style={s.seksjon}>
-            <Text style={s.seksjonTittel}>PASSER FOR</Text>
-            <View style={s.tagRad}>
-              {ovelse.act.map((a: number) => (
-                <View key={a} style={s.aktTag}>
-                  <Text style={s.aktTagTekst}>Akt {a}</Text>
-                </View>
-              ))}
-              {(ovelse.bodyParts || []).map((del: string) => (
-                <View key={del} style={s.bodyTag}>
-                  <Text style={s.bodyTagTekst}>{del}</Text>
-                </View>
-              ))}
-            </View>
+            <Text style={s.seksjonTittel}>OM ØVELSEN</Text>
+
+            {(ovelse.act || []).length > 0 && (
+              <View style={s.tagRad}>
+                {ovelse.act.map((a: number) => (
+                  <View key={a} style={s.tagPar}>
+                    <View style={[s.aktTag, AKT_FARGE[a] && { backgroundColor: AKT_FARGE[a].bg, borderColor: AKT_FARGE[a].border }]}>
+                      <Text style={[s.aktTagTekst, AKT_FARGE[a] && { color: AKT_FARGE[a].tekst }]}>Akt {a}</Text>
+                    </View>
+                    <TouchableOpacity style={s.infoChip} onPress={() => setVisAktModal(a)}>
+                      <Text style={s.infoChipTekst}>?</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {(ovelse.tracking_types || (ovelse.tracking_type ? [ovelse.tracking_type] : [])).length > 0 && (
+              <View style={s.tagRad}>
+                {(ovelse.tracking_types || [ovelse.tracking_type]).map((t: string) => (
+                  <View key={t} style={s.tagPar}>
+                    <View style={s.trackingChip}>
+                      <Text style={s.trackingChipTekst}>{TRACKING_LABEL[t] || t}</Text>
+                    </View>
+                    {TRACKING_INFO[t] && (
+                      <TouchableOpacity style={s.infoChip} onPress={() => setVisTrackingModal(t)}>
+                        <Text style={s.infoChipTekst}>?</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
       </ScrollView>
+
+      {/* Akt-forklaring modal */}
+      <Modal visible={visAktModal !== null} transparent animationType="fade" onRequestClose={() => setVisAktModal(null)}>
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setVisAktModal(null)}>
+          <View style={s.modalKort} onStartShouldSetResponder={() => true}>
+            <Text style={s.modalTittel}>Akt {visAktModal}</Text>
+            <Text style={s.modalTekst}>{visAktModal ? AKT_FORKLARING[visAktModal] : ''}</Text>
+            <TouchableOpacity onPress={() => setVisAktModal(null)}>
+              <Text style={s.modalLukk}>Lukk</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Tracking-type modal */}
+      <Modal visible={visTrackingModal !== null} transparent animationType="fade" onRequestClose={() => setVisTrackingModal(null)}>
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setVisTrackingModal(null)}>
+          <View style={s.modalKort} onStartShouldSetResponder={() => true}>
+            {visTrackingModal && TRACKING_INFO[visTrackingModal] && (
+              <>
+                <Text style={s.modalTittel}>{TRACKING_INFO[visTrackingModal].tittel}</Text>
+                <Text style={s.modalTekst}>{TRACKING_INFO[visTrackingModal].tekst}</Text>
+                {TRACKING_INFO[visTrackingModal].eksempel && (
+                  <Text style={s.modalEksempel}>{TRACKING_INFO[visTrackingModal].eksempel}</Text>
+                )}
+              </>
+            )}
+            <TouchableOpacity onPress={() => setVisTrackingModal(null)}>
+              <Text style={s.modalLukk}>Lukk</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -121,11 +212,19 @@ const s = StyleSheet.create({
   kontekstTekst: { fontSize: 14, color: colors.text, fontWeight: '400', lineHeight: 22 },
   instruksjonKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 14 },
   instruksjonTekst: { fontSize: 14, color: colors.text, fontWeight: '400', lineHeight: 22 },
-  anatomiWrapper: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, overflow: 'hidden', alignItems: 'center', padding: 16 },
-  anatomiImage: { width: '100%', height: 200 },
+  anatomiKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 16, alignItems: 'center' },
   tagRad: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  aktTag: { backgroundColor: colors.greenDim, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 },
-  aktTagTekst: { fontSize: 11, color: colors.green, fontWeight: '500' },
-  bodyTag: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 },
-  bodyTagTekst: { fontSize: 11, color: colors.muted, fontWeight: '400' },
+  tagPar: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  aktTag: { borderWidth: 1, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 },
+  aktTagTekst: { fontSize: 11, fontWeight: '500' },
+  trackingChip: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 },
+  trackingChipTekst: { fontSize: 11, color: colors.muted, fontWeight: '400' },
+  infoChip: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, alignItems: 'center', justifyContent: 'center' },
+  infoChipTekst: { fontSize: 10, color: colors.muted2, fontWeight: '600' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 20, width: '100%', gap: 10 },
+  modalTittel: { fontSize: 17, fontWeight: '500', color: colors.text },
+  modalTekst: { fontSize: 14, color: colors.muted, fontWeight: '300', lineHeight: 20 },
+  modalEksempel: { fontSize: 13, color: colors.muted2, fontWeight: '300', fontStyle: 'italic' },
+  modalLukk: { fontSize: 14, color: colors.accent, fontWeight: '500', textAlign: 'right', marginTop: 4 },
 });

@@ -6,6 +6,7 @@ import {
 import { collection, addDoc, doc, updateDoc, increment, serverTimestamp, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { auth, db } from '../../services/firebase';
 import VideoSpiller from '../../components/VideoSpiller';
+import AnatomyViewer from '../../components/AnatomyViewer';
 import { colors } from '../../theme/colors';
 import { vurderProgresjon } from '../../services/progresjon';
 
@@ -35,6 +36,11 @@ const TRACKING_INFO: Record<string, { tittel: string; tekst: string; eksempel?: 
     tittel: 'Anstrengelse (RPE)',
     tekst: 'Hvor hardt kjennes belastningen totalt etter settet? Ikke bare muskeltretthet – ta med pust, generell innsats og om du hadde mer å gi.',
     eksempel: '1–3 = lett. 4–6 = moderat, du jobber men kan snakke. 7–8 = hardt. 9–10 = nær maks.',
+  },
+  rpe_rir: {
+    tittel: 'Reps i reserve (RIR)',
+    tekst: 'Hvor mange reps hadde du igjen etter settet? Tenk: «Hvis jeg måtte, hadde jeg klart X reps til». 0 = absolutt ingenting igjen. 3 = god margin (progresjon-terskel).',
+    eksempel: '0 = RPE 10. 1 = RPE 9. 2 = RPE 8. 3 = RPE 7 (progresjon). 4 = lett.',
   },
   mobility: {
     tittel: 'Bevegelsesfølelse',
@@ -216,7 +222,10 @@ export default function AktivOktScreen({ navigation, route }: any) {
   function loggSett() {
     const verdier: Record<string, number> = {};
     trackingTypes.forEach(t => {
-      if (t !== 'completed') verdier[t] = repVerdier[t] || 0;
+      if (t !== 'completed') {
+        const erRIRType = t === 'rpe' && trackingTypes.includes('sets_reps_weight');
+        verdier[t] = erRIRType ? 10 - (repVerdier[t] || 0) : (repVerdier[t] || 0);
+      }
     });
     const nyttSett = {
       sett: settIndex + 1,
@@ -326,7 +335,7 @@ export default function AktivOktScreen({ navigation, route }: any) {
     return (
       <SafeAreaView style={s.container}>
         <View style={s.topbar}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+          <TouchableOpacity onPress={() => navigation.navigate('MainTabs')}>
             <Text style={s.avbryt}>Avbryt</Text>
           </TouchableOpacity>
           <Text style={s.topbarTittel}>Før du starter</Text>
@@ -782,30 +791,32 @@ export default function AktivOktScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {/* Kollapsbar – vanlige feil og muskler */}
-        {(gjeldendeData?.feilVideoUrl || gjeldendeData?.anatomyImageUrl) && (
+        {/* Kollapsbar – vanlige feil */}
+        {gjeldendeData?.feilVideoUrl && (
           <TouchableOpacity style={s.visMerKnapp} onPress={() => setVisDetaljer(v => !v)}>
-            <Text style={s.visMerTekst}>{visDetaljer ? '∧ Skjul' : '∨ Vanlige feil og muskler'}</Text>
+            <Text style={s.visMerTekst}>{visDetaljer ? '∧ Skjul' : '∨ Vanlig feil'}</Text>
           </TouchableOpacity>
         )}
 
-        {visDetaljer && (
+        {visDetaljer && gjeldendeData?.feilVideoUrl && (
           <View style={s.detaljerSeksjon}>
-            {gjeldendeData?.feilVideoUrl && (
-              <View>
-                <View style={s.feilLabel}>
-                  <View style={s.feilDot} />
-                  <Text style={s.feilLabelTekst}>Vanlig feil – unngå dette</Text>
-                </View>
-                <VideoSpiller url={gjeldendeData.feilVideoUrl} />
-              </View>
-            )}
-            {gjeldendeData?.anatomyImageUrl && (
-              <View style={s.anatomiWrapper}>
-                <Text style={s.anatomiLabel}>MUSKLER SOM AKTIVERES</Text>
-                <Image source={{ uri: gjeldendeData.anatomyImageUrl }} style={s.anatomiImage} resizeMode="contain" />
-              </View>
-            )}
+            <View style={s.feilLabel}>
+              <View style={s.feilDot} />
+              <Text style={s.feilLabelTekst}>Vanlig feil – unngå dette</Text>
+            </View>
+            <VideoSpiller url={gjeldendeData.feilVideoUrl} />
+          </View>
+        )}
+
+        {/* Anatomi – alltid synlig */}
+        {(gjeldendeData?.anatomi || gjeldendeData?.muskelgrupper) && (
+          <View style={s.anatomiWrapper}>
+            <Text style={s.anatomiLabel}>MUSKLER SOM AKTIVERES</Text>
+            <AnatomyViewer
+              anatomi={gjeldendeData.anatomi || { anterior: [], posterior: [] }}
+              muskelgrupper={gjeldendeData.muskelgrupper}
+              kompakt
+            />
           </View>
         )}
 
@@ -841,15 +852,17 @@ export default function AktivOktScreen({ navigation, route }: any) {
               </View>
             ) : (
               trackingTypes.map(type => {
-                const erBegrenset = ['activation_quality', 'mobility', 'rpe', 'side_diff'].includes(type);
-                const maks = erBegrenset ? 10 : 999;
-                const harInfo = !!TRACKING_INFO[type];
+                const erRIR = type === 'rpe' && trackingTypes.includes('sets_reps_weight');
+                const erBegrenset = ['activation_quality', 'mobility', 'side_diff'].includes(type);
+                const maks = erRIR ? 4 : erBegrenset ? 10 : 999;
+                const infoKey = erRIR ? 'rpe_rir' : type;
+                const harInfo = !!TRACKING_INFO[infoKey];
                 return (
                   <View key={type} style={s.trackingSeksjon}>
                     <View style={s.trackingLabelRad}>
-                      <Text style={s.seksjonTittel}>{TRACKING_LABEL[type] || type}</Text>
+                      <Text style={s.seksjonTittel}>{erRIR ? 'Reps i reserve (0–4)' : TRACKING_LABEL[type] || type}</Text>
                       {harInfo && (
-                        <TouchableOpacity style={s.infoChip} onPress={() => setVisInfoModal(type)}>
+                        <TouchableOpacity style={s.infoChip} onPress={() => setVisInfoModal(infoKey)}>
                           <Text style={s.infoChipTekst}>?</Text>
                         </TouchableOpacity>
                       )}
@@ -869,8 +882,8 @@ export default function AktivOktScreen({ navigation, route }: any) {
                         <Text style={s.stepperKnappTekst}>+</Text>
                       </TouchableOpacity>
                     </View>
-                    {erBegrenset && (
-                      <Text style={s.stepperMaks}>maks 10</Text>
+                    {(erBegrenset || erRIR) && (
+                      <Text style={s.stepperMaks}>{erRIR ? 'maks 4' : 'maks 10'}</Text>
                     )}
                   </View>
                 );

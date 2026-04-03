@@ -177,11 +177,11 @@ export default function HjemScreen({ navigation }: any) {
                   <View>
                     <Text style={s.dagensOktLabel}>I DAG</Text>
                     <Text style={s.dagensOktTittel}>{dagensProgram.tittel}</Text>
-                  </View>
-                  <View style={s.dagensOktBadge}>
-                    <Text style={s.dagensOktBadgeTekst}>
-                      {(dagensProgram.ovelser || []).length} øvelser
-                    </Text>
+                    <View style={[s.dagensOktBadge, { alignSelf: 'flex-start', marginTop: 6 }]}>
+                      <Text style={s.dagensOktBadgeTekst}>
+                        {(dagensProgram.ovelser || []).length} øvelser
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
@@ -561,7 +561,7 @@ const s = StyleSheet.create({
 
   // Dagens økt
   dagensOktKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: 14, padding: 16, gap: 14 },
-  dagensOktHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  dagensOktHeader: { flexDirection: 'row', alignItems: 'flex-start' },
   dagensOktLabel: { fontSize: 11, color: colors.green, fontWeight: '500', letterSpacing: 0.8, marginBottom: 2 },
   dagensOktTittel: { fontSize: 16, color: colors.text, fontWeight: '400' },
   dagensOktBadge: { backgroundColor: colors.greenDim, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 },

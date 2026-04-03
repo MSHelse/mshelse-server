@@ -231,8 +231,8 @@ export default function ProfilScreen({ navigation }: any) {
         {erAdmin && (
           <View style={s.seksjon}>
             <Text style={s.seksjonTittel}>ADMIN</Text>
-            <TouchableOpacity style={s.adminKnapp} onPress={() => navigation.navigate('AdminOvelse')}>
-              <Text style={s.adminKnappTekst}>Administrer øvelsesbibliotek</Text>
+            <TouchableOpacity style={s.adminKnapp} onPress={() => navigation.navigate('AdminPanel')}>
+              <Text style={s.adminKnappTekst}>Admin-panel</Text>
               <Text style={s.radKnappPil}>›</Text>
             </TouchableOpacity>
           </View>

@@ -9,10 +9,17 @@ import { colors } from '../../theme/colors';
 
 const KROPPSDELER = ['Alle', 'Korsrygg', 'Hofte', 'Nakke', 'Skulder', 'Kne', 'Legg', 'Core'];
 
+const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> = {
+  1: { bg: colors.dangerDim, border: 'rgba(192,57,43,0.3)', tekst: colors.danger },
+  2: { bg: colors.yellowDim, border: colors.yellowBorder, tekst: colors.yellow },
+  3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
+};
+
 export default function BiblioteKScreen({ navigation }: any) {
   const [laster, setLaster] = useState(true);
   const [ovelser, setOvelser] = useState<any[]>([]);
   const [filter, setFilter] = useState('Alle');
+  const [filterAkt, setFilterAkt] = useState(0);
   const [sok, setSok] = useState('');
 
   useEffect(() => {
@@ -34,7 +41,8 @@ export default function BiblioteKScreen({ navigation }: any) {
     return ovelser.filter(o => {
       const matchFilter = filter === 'Alle' || (o.bodyParts || []).includes(filter);
       const matchSok = !sok || o.name?.toLowerCase().includes(sok.toLowerCase());
-      return matchFilter && matchSok;
+      const matchAkt = filterAkt === 0 || (o.act || []).includes(filterAkt);
+      return matchFilter && matchSok && matchAkt;
     });
   }
 
@@ -93,6 +101,24 @@ export default function BiblioteKScreen({ navigation }: any) {
         ))}
       </ScrollView>
 
+      <View style={s.aktFilterRad}>
+        <TouchableOpacity
+          style={[s.aktFilterChip, filterAkt === 0 && s.aktFilterChipAktiv]}
+          onPress={() => setFilterAkt(0)}
+        >
+          <Text style={[s.filterTekst, filterAkt === 0 && s.filterTekstAktiv]}>Alle akter</Text>
+        </TouchableOpacity>
+        {[1, 2, 3].map(a => (
+          <TouchableOpacity
+            key={a}
+            style={[s.aktFilterChip, filterAkt === a && { backgroundColor: AKT_FARGE[a].bg, borderColor: AKT_FARGE[a].border }]}
+            onPress={() => setFilterAkt(filterAkt === a ? 0 : a)}
+          >
+            <Text style={[s.filterTekst, filterAkt === a && { color: AKT_FARGE[a].tekst }]}>Akt {a}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <ScrollView contentContainerStyle={s.inner}>
         {Object.keys(grupper).length === 0 ? (
           <View style={s.tomKort}>
@@ -113,15 +139,10 @@ export default function BiblioteKScreen({ navigation }: any) {
                       <Text style={s.ovelseNavn}>{o.name}</Text>
                       <View style={s.ovelseTagRow}>
                         {(o.act || []).map((a: number) => (
-                          <View key={a} style={s.aktTag}>
-                            <Text style={s.aktTagTekst}>Akt {a}</Text>
+                          <View key={a} style={[s.aktTag, AKT_FARGE[a] && { backgroundColor: AKT_FARGE[a].bg, borderColor: AKT_FARGE[a].border }]}>
+                            <Text style={[s.aktTagTekst, AKT_FARGE[a] && { color: AKT_FARGE[a].tekst }]}>Akt {a}</Text>
                           </View>
                         ))}
-                        {(o.purposes || []).length > 1 && (
-                          <View style={s.formaalTag}>
-                            <Text style={s.formaalTagTekst}>{o.purposes.length} formål</Text>
-                          </View>
-                        )}
                       </View>
                     </View>
                     <Text style={s.pil}>›</Text>
@@ -159,10 +180,11 @@ const s = StyleSheet.create({
   ovelseInfo: { flex: 1, gap: 5 },
   ovelseNavn: { fontSize: 15, fontWeight: '500', color: colors.text },
   ovelseTagRow: { flexDirection: 'row', gap: 5 },
-  aktTag: { backgroundColor: colors.greenDim, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  aktTagTekst: { fontSize: 10, color: colors.green, fontWeight: '500' },
-  formaalTag: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  formaalTagTekst: { fontSize: 10, color: colors.muted, fontWeight: '500' },
+  aktTag: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  aktTagTekst: { fontSize: 10, fontWeight: '500' },
+  aktFilterRad: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  aktFilterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.surface },
+  aktFilterChipAktiv: { backgroundColor: colors.accent, borderColor: colors.accent },
   pil: { fontSize: 18, color: colors.muted2 },
   tomKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 24, alignItems: 'center' },
   tomTekst: { fontSize: 14, color: colors.muted, fontWeight: '400' },

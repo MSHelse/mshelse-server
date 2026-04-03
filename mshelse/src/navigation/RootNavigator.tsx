@@ -17,6 +17,7 @@ import KartleggingScreen from '../screens/main/KartleggingScreen';
 import ProfilScreen from '../screens/main/ProfilScreen';
 import OvelseDetaljScreen from '../screens/main/OvelseDetaljScreen';
 import AdminOvelseScreen from '../screens/main/AdminOvelseScreen';
+import AdminPanelScreen from '../screens/main/AdminPanelScreen';
 import AktivOktScreen from '../screens/main/AktivOktScreen';
 import ProgramBuilderScreen from '../screens/main/ProgramBuilderScreen';
 import ProgramDetaljScreen from '../screens/main/ProgramDetaljScreen';
@@ -52,6 +53,7 @@ function MainStack() {
       <Stack.Screen name="Kartlegging" component={KartleggingScreen} />
       <Stack.Screen name="Profil" component={ProfilScreen} />
       <Stack.Screen name="OvelseDetalj" component={OvelseDetaljScreen} />
+      <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
       <Stack.Screen name="AdminOvelse" component={AdminOvelseScreen} />
       <Stack.Screen name="AktivOkt" component={AktivOktScreen} />
       <Stack.Screen name="ProgramBuilder" component={ProgramBuilderScreen} />
