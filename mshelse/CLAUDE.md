@@ -1,5 +1,5 @@
 # MS Helse – Prosjektkontekst
-Sist oppdatert: 3. april 2026 (sesjon 3)
+Sist oppdatert: 4. april 2026 (sesjon 4)
 
 ---
 
@@ -36,6 +36,8 @@ Når en bug rapporteres:
 8. **Reassessment-dokumenter** lagres med `type: 'reassessment'` og feltene `tittel`, `triage`, `konklusjon`, `begrunnelse`, `neste_steg`, `program_hint`. Ved `neste_akt` eller `intensiver` settes gammelt program `aktiv: false`.
 9. **index.js er ren JavaScript** – ingen TypeScript-annotasjoner. Kjør `node --check index.js` før push.
 10. **Øvelses-struktur er flat** – ingen `purposes[]`. Feltene `instruksjon`, `tracking_types`, `motstandsType`, `kliniskNotat` ligger direkte på rotnivå i Firestore `exercises`-dokumentet. `formaalLabel` eksisterer i eldre data men brukes ikke lenger i UI.
+13. **`frekvensPerDag` ligger på program, ikke øvelse.** Felt i Firestore `programs/{id}`. `okterTotalt = dager.length × uker × frekvensPerDag`. Backend kan returnere `{ programmer: [...] }` array – ProgramBuilderScreen håndterer begge formater.
+14. **Deploy via `./deploy.sh`** (ikke manuell vercel-kommando). Scriptet kopierer `.vercel/` inn i `dist/` for å sikre riktig Vercel-prosjekt. Uten dette lages et nytt "dist"-prosjekt i stedet for å oppdatere mshelse.
 11. **personligKontekst** vises kun i OvelseDetaljScreen hvis sendt med som param fra ProgramDetaljScreen. Aldri fra biblioteket. Handler om HVORFOR og klinisk relevans – ikke utførelsesinstruksjoner.
 12. **Ikke start å generere kode** før Quang eksplisitt sier han er klar. Samle alle krav først, implementer i én batch.
 
@@ -113,12 +115,13 @@ src/components/AnatomyViewer.tsx
 |--------|-------------------------------|
 | **KartleggingScreen** | 3 steg: (1) Profil – kjønn/alder/aktivitet/tilstander inkl. Gravid, forhåndsutfylt fra Firestore, lagres tilbake. (2) Innledning – åpent tekstfelt min 10 tegn. (3) AI-kartlegging. Første melding inneholder profil + innledning. |
 | **ProfilScreen** | Kollapsbar HELSEPROFIL: kjønn, alder, aktivitet, tilstander, andreTilstander, lagre-knapp kun ved endring. KARTLEGGINGSHISTORIKK: kartlegginger gruppert med statussjekker under (datobasert periode-matching), kartlegging navigerer til KartleggingDetalj, statussjekk ekspanderer inline. Admin-knapp for Quang. |
-| **HjemScreen** | SituasjonKort: akt-badge med ?-chip (modal forklarer alle 3 akter), håndterer vanlig assessment og type:'reassessment' (konklusjon-badge + begrunnelse). Progresjonsbanner med statussjekk-knapp. Dagens økt. Aktive programmer. Focus-refresh. |
-| **TrackingScreen** | Ukeoversikt. Stats (compliance fra okterFullfort/okterTotalt). Formål-radar via react-native-svg – Polygon/Circle/Line, 2 lag (grønn=nåværende, gul=forrige halvdel), normalisert 0–10, ?-chip åpner forklarings-modal. Fremgang-graf – to-nivå: program-chips → øvelse-liste (variant C, lukkes ved valg) → datobasert graf (krever ≥2 fullførte økter). Logg – **ukegruppert** ("Denne uken", "Forrige uke", "X uker siden"), maks 8 uker, compliance per uke, ekspanderbar per økt med sparklines + sett-brikker. Focus-refresh. |
-| **AktivOktScreen** | Video øverst. Hold/tempo fra program ELLER Firestore fallback. Tempo-? popup. Hvile: clearInterval-fix, ±15s, stoppHvile(). Avslutt: modal utenfor ScrollView. Progresjonsbanner → Reassessment. assessment-param sendes videre. lagreOkt(sjekkInnData, fraSkjerm). TRACKING_INFO konstant + ?-chip ved alle tracking-labels. **RIR for sets_reps_weight:** når `rpe`+`sets_reps_weight` i tracking_types → vises som "Reps i reserve (0–4)", konverteres til RPE (10−RIR) ved lagring. Viser `personligKontekst` som grønn "FOR DEG SPESIELT"-boks under instruksjon. AnatomyViewer kompakt alltid synlig med muskelgrupper. |
+| **HjemScreen** | SituasjonKort: akt-badge med ?-chip (modal forklarer alle 3 akter), håndterer vanlig assessment og type:'reassessment' (konklusjon-badge + begrunnelse). Progresjonsbanner med statussjekk-knapp. Dagens økt med **frekvens-badge** ("X av Y ganger i dag") og dynamisk knapp-tekst ("Start gang 2 av 4 →" / "Gjort 4× – start en gang til →"). Aktive programmer. Focus-refresh. |
+| **TrackingScreen** | **Program-filter chip-rad** øverst (Alle + ett per program fra logger, settes automatisk til aktivt program). Alle stats/logg/radar filtreres på valgt program. Ukeoversikt (X/Y for høyfrekvens). Stats (compliance fra okterFullfort/okterTotalt for valgt program). Formål-radar – 2 lag: ved filterProgram=grønn(program)+blå(alle programmer); ved Alle=grønn(siste)+gul(forrige). `RadarDiagram` har `fargeFør`-prop. Fremgang-graf – to-nivå: program-chips (synker med filterProgram) → øvelse-liste (variant C) → datobasert graf, daglig aggregering for høyfrekvens. Logg – **ukegruppert**, for høyfrekvens også **daggruppert** innen uke. Focus-refresh. |
+| **AktivOktScreen** | Video øverst. Hold/tempo fra program ELLER Firestore fallback. Tempo-? popup. Hvile: clearInterval-fix, ±15s, stoppHvile(). Avslutt: modal utenfor ScrollView. Progresjonsbanner → Reassessment. assessment-param sendes videre. lagreOkt(sjekkInnData, fraSkjerm). TRACKING_INFO konstant + ?-chip ved alle tracking-labels. **RIR for sets_reps_weight:** når `rpe`+`sets_reps_weight` i tracking_types → vises som "Reps i reserve (0–4)", konverteres til RPE (10−RIR) ved lagring. Viser `personligKontekst` som grønn "FOR DEG SPESIELT"-boks under instruksjon. AnatomyViewer kompakt alltid synlig med muskelgrupper. **`completed` og andre tracking-typer vises parallelt** (ikke ternary – tidligere bug). Frekvens-strip under progress bar for høyfrekvens-programmer. |
+| **AktivOktScreen** | Video øverst. Hold/tempo fra program ELLER Firestore fallback. Tempo-? popup. Hvile: clearInterval-fix, ±15s, stoppHvile(). Avslutt: modal utenfor ScrollView. Progresjonsbanner → Reassessment. assessment-param sendes videre. lagreOkt(sjekkInnData, fraSkjerm). TRACKING_INFO konstant + ?-chip ved alle tracking-labels. **RIR for sets_reps_weight:** når `rpe`+`sets_reps_weight` i tracking_types → vises som "Reps i reserve (0–4)", konverteres til RPE (10−RIR) ved lagring. Viser `personligKontekst` som grønn "FOR DEG SPESIELT"-boks under instruksjon. AnatomyViewer kompakt alltid synlig med muskelgrupper. **`completed` og andre tracking-typer vises parallelt** (ikke ternary). Frekvens-strip under progress bar for høyfrekvens-programmer. |
 | **ReassessmentScreen** | Henter logger, bygger trackingOppsummering, sender til /api/reassessment. Lagrer med type:'reassessment' + SituasjonKort-feltene. Deaktiverer gammelt program ved neste_akt/intensiver. navigation.reset ved tilbake til Hjem. Feilskjerm med "Prøv igjen". |
 | **KartleggingDetaljScreen** | Viser full konklusjonsside: kandidater, funn, livsstil, bekreftende, oppsummering, triage for vanlig assessment. Begrunnelse, neste_steg, program_hint for reassessment. |
-| **ProgramBuilderScreen** | Auto-generering ved fraReassessment/fraAssessment. genererHarKjørt-flag. Loading/feilskjerm. navigation.reset til Hjem ved lagring. Leser flat øvelsesstruktur (ingen purposes[]). |
+| **ProgramBuilderScreen** | Auto-generering ved fraReassessment/fraAssessment. genererHarKjørt-flag. Loading/feilskjerm. navigation.reset til Hjem ved lagring. Leser flat øvelsesstruktur (ingen purposes[]). **FREKVENS PER DAG** chip-rad (1×–5×). Håndterer `data.programmer` array fra AI (lagrer alle programmer direkte). Viser "AI genererte X programmer: …" ved flere programmer. |
 | **ProgramScreen** | Grønn AI Coach-boks med akt-info og tittel på kartlegging. Sender normalisert assessment til ProgramBuilder. Dato (startet) per program. Inline slett-bekreftelse (ingen Alert). Aktive + arkiverte programmer. |
 | **ProgramDetaljScreen** | Dato under tittel. Inline slett-bekreftelse i bunntBar. Sender personligKontekst med til OvelseDetalj. |
 | **OvelseDetaljScreen** | Viser personligKontekst som grønn "FOR DEG SPESIELT"-boks hvis sendt med som param (kun fra program). Viser instruksjon fra flat struktur med fallback til purposes[0].instruction for gammel data. AnatomyViewer med muskelgrupper. **"OM ØVELSEN"**-seksjon: akt-tags med semantisk farge + ?-chip (forklarer akt 1/2/3), tracking-type-chips + ?-chip (forklarer tracking-metoden). Ingen bodyParts-tags. IKKE fra biblioteket. |
@@ -233,7 +236,7 @@ exercises/{id}
 AND-logikk – ALLE kliniske typer må nå terskel over siste 2–3 logger:
 `activation_quality` ≥ 8 · `mobility` ≥ 8 · `contact_reps` ≥ 85% rep-mål · `rpe` ≤ 7 OG fall ≥ 1.5 · `side_diff` ≤ 3
 `sets_reps`, `sets_reps_weight`, `completed` ignoreres klinisk.
-Akt 1 ekstra: smerte = 0. Trigger: ≥ 40% fullført, ≥ 2 logger.
+Akt 1 ekstra: smerte = 0. Trigger: ≥ 40% fullført, ≥ 2 **unike treningsdager** (ikke antall sesjoner – gruppert på `dato.toDateString()` for høyfrekvens-støtte).
 
 ---
 
@@ -259,7 +262,7 @@ users/{uid}/programs/{id}
   tittel, akt, uker, dager[], ovelser[]
   ovelser[]: { exerciseId, navn, instruksjon, personligKontekst,
                tracking_types[], tracking_type, sets, reps, hold, tempo }
-  aktiv, okterFullfort, okterTotalt, source, assessmentId, opprettet
+  aktiv, okterFullfort, okterTotalt, frekvensPerDag, source, assessmentId, opprettet
   baselineSporsmal: [{ id, sporsmal, svar, midtveis }]
   midtveisGjort, midtveisGrc
 

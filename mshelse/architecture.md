@@ -1,7 +1,7 @@
 # MS Helse – Architecture & Decision Log
 
 **Purpose:** Enable a new developer or AI to understand the full system without reading 10+ chat sessions.
-**Last updated:** 3. april 2026 · Covers sessions 1–10 (claude.ai) + Claude Code sessions 1–3.
+**Last updated:** 4. april 2026 · Covers sessions 1–10 (claude.ai) + Claude Code sessions 1–4.
 
 ---
 
@@ -263,10 +263,17 @@ Each variant of an exercise (e.g., "Benhev – Aktivering" vs "Benhev – Stabil
 3. **Final check-in** (last session) — Three columns: START · MIDWAY · NOW
 
 **Radar visualization:**
-Two-layer radar using `react-native-svg` (Polygon, Circle, Line): green = current period, yellow = previous half-period. Normalized 0–10. The radar is an observation tool, not a diagnostic tool — it shows what the user has trained, not what they "should" train. An expected/target profile was considered and rejected because rehabilitation is non-linear and hard to predict. (Session 6)
+Two-layer radar using `react-native-svg` (Polygon, Circle, Line). Two rendering modes:
+- **"Alle" selected:** green = current half-period, yellow = previous half-period (trend observation)
+- **Specific program selected:** green = selected program, blue (`#4A90D9`) = all programs combined (comparison)
+
+The `RadarDiagram` component takes a `fargeFør?: string` prop (default: `colors.yellow`) for the second polygon color. Normalized 0–10. The radar is an observation tool, not a diagnostic tool. (Session 6, Claude Code session 4)
+
+**Program filter chips:**
+A horizontal chip row ("Alle" + one chip per program from logger) appears at the top of TrackingScreen when there are multiple programs. Selecting a program filters: stats, log section, and radar. Auto-set to active program on first load. Selecting a program chip also syncs `valgtProgram` in the Fremgang graph.
 
 **Fremgang graph:**
-Two-level navigation: program chips (level 1) → exercise chips within that program (level 2, collapsible variant C) → date-based line graph. Requires ≥ 2 completed sessions to render. Shows full date range from first to last logged session. (Sessions 6, 7)
+Two-level navigation: program chips (level 1) → exercise chips within that program (level 2, collapsible variant C) → date-based line graph. Requires ≥ 2 completed sessions to render. Same-day sessions are aggregated to a single daily average data point (prevents cluttering from high-frequency programs). (Sessions 6, 7, Claude Code session 4)
 
 **Sparklines:** Small trend lines in the expanded log view showing per-exercise average over the last 8 sessions. Green line pointing up = progress. (Session 6)
 
@@ -341,7 +348,35 @@ Previously, `AdminOvelseScreen` had three separate text fields for primer/sekund
 **Why web `<img>` instead of React Native `Image`?**
 React Native's `Image` component on Expo web had rendering issues with absolute positioning and blend modes. Direct `<img>` tags via `Platform.OS === 'web'` check resolved this. (Session 9)
 
-### 3.7b Tracking — RIR for Strength Exercises (Claude Code session 3)
+### 3.7b High-Frequency Programs (`frekvensPerDag`) (Claude Code session 4)
+
+**Files involved:** `ProgramBuilderScreen.tsx`, `HjemScreen.tsx`, `AktivOktScreen.tsx`, `TrackingScreen.tsx`, `index.js`
+
+Some exercises (stretching, activation in acute phases) are prescribed 3–5× per day. This is tracked at the **program level**, not exercise level — the same exercise can be 5×/day for acute pain but 1×/day for maintenance.
+
+**`frekvensPerDag` field on programs (Firestore):**
+```
+programs/{id}
+  frekvensPerDag: 1 | 2 | 3 | 4 | 5   (default 1)
+  okterTotalt: dager.length × uker × frekvensPerDag
+```
+
+**ProgramBuilderScreen:** Chip row "FREKVENS PER DAG" (1×–5×) added between varighet and øvelser sections. `okterTotalt` is recalculated on save.
+
+**AI two-program response:** When the clinical context warrants it (e.g., acute phase + strength training), the backend returns `{ programmer: [...] }` (array). ProgramBuilderScreen handles both `data.programmer` (array) and the old single-program response. Shows summary "AI genererte 2 programmer: …" when multiple programs received.
+
+**HjemScreen DagensØkt card:** Shows badge "X av Y ganger i dag" based on `dagensLogger.filter(l => l.fullfort).length` vs `frekvensPerDag`. Button text adjusts: "Start gang 2 av 4 →" / "Gjort 4× – start en gang til →".
+
+**AktivOktScreen:** Shows a frequency strip below the progress bar for high-freq programs.
+
+**Progression logic:** `progresjon.ts` groups logs by unique training days (not session count) to prevent 3 same-day sessions from falsely triggering progression as "3 separate days." Only unique `dato.toDateString()` values count.
+
+**Compliance denominator:** `dager.length × frekvensPerDag` instead of just `dager.length`.
+
+**Why on program, not exercise?**
+Same exercise can be high-frequency for one user (acute pain) and normal frequency for another (maintenance). Storing it on the exercise would create duplicate exercises differing only in frequency. Program-level frequency also allows the AI to generate two distinct programs (one high-freq, one normal) without complicating the exercise library. (Claude Code session 4)
+
+### 3.7c Tracking — RIR for Strength Exercises (Claude Code session 3)
 
 **Affected files:** `AktivOktScreen.tsx`, `progresjon.ts` (unchanged)
 
@@ -533,6 +568,25 @@ Reads `instruksjon` (flat structure) with fallback to `purposes[0].instruction` 
 
 If you add anatomy entries without a `rolle`, the fallback in AnatomyViewer fires. Always set `rolle` in the admin panel.
 
+### 4.11 TrackingScreen `loggerFiltrert` downstream effects
+
+`loggerFiltrert` is a derived variable:
+```typescript
+const loggerFiltrert = filterProgram
+  ? logger.filter(l => l.programTittel === filterProgram)
+  : logger;
+```
+
+Everything downstream reads from `loggerFiltrert` when a program is selected:
+- `fullforte` count (Økter stat)
+- `compliance` calculation
+- `loggerFiltrert.length` (Totalt logget stat)
+- Radar `radarNå` and the halvt/nyligLogger split
+- Logg section: `grupperLoggerPerUke(loggerFiltrert)`
+- Fremgang graph: `valgtProgram` syncs via `useEffect([filterProgram])`
+
+`logger` (unfiltered) is still used for: `programNavn` list, `beregnRadar(logger)` for the blue "all programs" comparison polygon, and all historical normalization in `beregnRadar`. Never filter `programNavn` or the blue radar layer — they always represent the full history. (Claude Code session 4)
+
 ### 4.10 Admin Panel ↔ Backend UID coupling
 
 `ADMIN_UID` in `index.js` is hardcoded to Quang's Firebase Auth UID (`RpzuHdFg5heYMVHjC6F4IBPSrmq2`). The `requireAdmin` middleware on all `/api/admin/*` endpoints verifies both the token signature AND that the UID matches. If Quang re-creates his Firebase account (e.g., changed email with new account), this constant must be updated on Render.
@@ -572,7 +626,7 @@ Figma exported pre-split Outer-Inner images, but the viewer was refactored to cl
 Quang works on a Chromebook Linux container where long `cat << 'EOF'` terminal commands are unreliable (they silently truncate). All long files must be created as downloadable Claude artifacts and copied manually. (Sessions 3–10)
 
 ### 5.11 Week-grouped log instead of flat list (Claude Code session 3)
-`TrackingScreen` originally showed a flat list of the last 15 sessions. This was replaced with week-grouped sections (up to 8 weeks back) with a label ("Denne uken", "Forrige uke", "X uker siden") and a compliance count ("2 av 3 fullført") per week. The key helper is `getMandagIUken(date: Date)` which snaps any date to Monday at 00:00 — used to group sessions by calendar week. This is more clinically useful than chronological position because users think in weekly training cycles.
+`TrackingScreen` originally showed a flat list of the last 15 sessions. This was replaced with week-grouped sections (up to 8 weeks back) with a label ("Denne uken", "Forrige uke", "X uker siden") and a compliance count per week. The key helper is `getMandagIUken(date: Date)` which snaps any date to Monday at 00:00. For high-frequency programs (`frekvensPerDag > 1`), the log is additionally day-grouped within each week (day header with "X av Y" count, collapsible sessions below). This prevents 35 individual session rows condensing into 7 manageable day-headers. (Claude Code session 3, 4)
 
 ### 5.12 RIR for strength exercises, not RPE (Claude Code session 3)
 For exercises with `sets_reps_weight` in `tracking_types`, the RPE stepper (0–10) is replaced with an RIR stepper (0–4). Reason: athletes and rehab patients naturally think in "reps left" first, then convert to RPE. Asking for RPE requires a mental abstraction step mid-rest. The conversion `RPE = 10 − RIR` is done at save time so all existing infrastructure (`progresjon.ts`, graphs, radar) remains unchanged. Max 4 was chosen because RIR > 4 is clinically meaningless for strength training.
@@ -580,7 +634,13 @@ For exercises with `sets_reps_weight` in `tracking_types`, the RPE stepper (0–
 ### 5.13 Admin Panel uses backend (not Firestore rules) for auth
 See section 3.9. Short version: stats aggregation requires server-side computation, the admin UID never appears in client code, and Firestore rules cannot enforce cross-collection aggregation logic.
 
-### 5.14 VideoSpiller platform split
+### 5.14 `frekvensPerDag` on program, not exercise (Claude Code session 4)
+Frequency was initially proposed as an exercise-level field. Rejected because the same exercise can be prescribed 5×/day for one patient in acute pain and 1×/day for another in maintenance. Putting it on the exercise would require duplicating exercises. Program-level frequency also allows the AI to generate two entirely separate programs (e.g., one 5×/day stretching program + one 1×/day activation program) without conflating them.
+
+### 5.15 Radar two-layer comparison: program vs all (Claude Code session 4)
+The radar originally showed current vs previous period (green/yellow) regardless of which program data represented. When a user has multiple programs, this was misleading. The new two-mode radar: "Alle" → green/yellow (current/previous period, unchanged), specific program → green (selected program) / blue (all programs). Blue gives clinical context — is this program's profile typical or atypical for this user? The `fargeFør` prop on `RadarDiagram` handles both modes without duplicating the component. (Claude Code session 4)
+
+### 5.16 VideoSpiller platform split
 YouTube embeds work differently on web vs native. `VideoSpiller.tsx` (web) uses an iframe with `rel=0`, `loop`, `modestbranding`. `VideoSpiller.native.tsx` uses `react-native-youtube-iframe` with loop. Both files coexist and React Native auto-selects based on platform. (Session 5)
 
 ---
@@ -700,8 +760,12 @@ AktivOktScreen:
 **Deploy frontend:**
 ```bash
 cd ~/mshelse-server/mshelse
-npx expo export --platform web && echo "/* /index.html 200" > dist/_redirects && npx vercel deploy dist --prod
+./deploy.sh
+# Equivalent to:
+# npx expo export --platform web && echo "/* /index.html 200" > dist/_redirects && cp -r .vercel dist/ && npx vercel deploy dist --prod
 ```
+
+**⚠️ Vercel project coupling:** `dist/.vercel/project.json` must reference the `mshelse` project (projectId `prj_U2dIAKyRhkmbYHNXQ9PNsjXh6boE`). Running `vercel deploy` from outside the `dist/` directory creates a new "dist" project instead. The `deploy.sh` script copies `.vercel/` into `dist/` before deploying to prevent this. (Claude Code session 4)
 
 **Deploy backend:**
 ```bash
