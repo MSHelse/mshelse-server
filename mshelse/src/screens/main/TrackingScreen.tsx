@@ -72,6 +72,9 @@ export default function TrackingScreen({ navigation }: any) {
   const [logger, setLogger] = useState<any[]>([]);
   const [programmer, setProgrammer] = useState<any[]>([]);
 
+  // Program-filter
+  const [filterProgram, setFilterProgram] = useState<string | null>(null);
+
   // Fremgang-graf: to-nivå navigasjon
   const [valgtProgram, setValgtProgram] = useState<string | null>(null);
   const [valgtOvelse, setValgtOvelse] = useState<string | null>(null);
@@ -88,6 +91,11 @@ export default function TrackingScreen({ navigation }: any) {
     return unsub;
   }, [navigation]);
 
+  useEffect(() => {
+    setValgtProgram(filterProgram);
+    setValgtOvelse(null);
+  }, [filterProgram]);
+
   async function hentData() {
     const user = auth.currentUser;
     if (!user) return;
@@ -96,8 +104,13 @@ export default function TrackingScreen({ navigation }: any) {
         getDocs(query(collection(db, 'users', user.uid, 'logger'), orderBy('dato', 'desc'), limit(50))),
         getDocs(query(collection(db, 'users', user.uid, 'programs'), orderBy('opprettet', 'desc'))),
       ]);
-      setLogger(loggSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setProgrammer(progSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const nyeLogger = loggSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const nyeProgrammer = progSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setLogger(nyeLogger);
+      setProgrammer(nyeProgrammer);
+      // Sett filter til aktivt program ved første lasting
+      const aktivt = nyeProgrammer.find((p: any) => p.aktiv);
+      if (aktivt) setFilterProgram(prev => prev ?? aktivt.tittel);
     } catch (e) { console.error(e); }
     finally { setLaster(false); }
   }
@@ -161,11 +174,16 @@ export default function TrackingScreen({ navigation }: any) {
     return resultat;
   }
 
-  const halvt = Math.ceil(logger.length / 2);
-  const nyligLogger = logger.slice(0, halvt);
-  const tidligereLogger = logger.slice(halvt);
+  const loggerFiltrert = filterProgram
+    ? logger.filter((l: any) => l.programTittel === filterProgram)
+    : logger;
+
+  const halvt = Math.ceil(loggerFiltrert.length / 2);
+  const nyligLogger = loggerFiltrert.slice(0, halvt);
+  const tidligereLogger = loggerFiltrert.slice(halvt);
   const radarNå = beregnRadar(nyligLogger);
-  const radarFør = beregnRadar(tidligereLogger);
+  const radarFør = filterProgram ? beregnRadar(logger) : beregnRadar(tidligereLogger);
+  const radarFørFarge = filterProgram ? colors.blue : colors.yellow;
 
   // ── FREMGANG-GRAF ─────────────────────────────────────────────
 
@@ -243,9 +261,13 @@ export default function TrackingScreen({ navigation }: any) {
   // ── COMPLIANCE ────────────────────────────────────────────────
 
   const aktivtProgram = programmer.find((p: any) => p.aktiv);
-  const compliance = aktivtProgram?.okterTotalt > 0
-    ? Math.round((aktivtProgram.okterFullfort / aktivtProgram.okterTotalt) * 100)
-    : logger.length > 0 ? Math.round((logger.filter(l => l.fullfort).length / logger.length) * 100) : 0;
+  const filtrerProgramDoc = filterProgram ? programmer.find((p: any) => p.tittel === filterProgram) : null;
+  const valgtP = filtrerProgramDoc || aktivtProgram;
+  const compliance = valgtP?.okterTotalt > 0
+    ? Math.round((valgtP.okterFullfort / valgtP.okterTotalt) * 100)
+    : loggerFiltrert.length > 0
+      ? Math.round(loggerFiltrert.filter((l: any) => l.fullfort).length / loggerFiltrert.length * 100)
+      : 0;
 
   // ── UKE-OVERSIKT ─────────────────────────────────────────────
 
@@ -276,7 +298,7 @@ export default function TrackingScreen({ navigation }: any) {
   );
 
   const ukedager = ukeDager();
-  const fullforte = logger.filter(l => l.fullfort).length;
+  const fullforte = loggerFiltrert.filter((l: any) => l.fullfort).length;
 
   return (
     <SafeAreaView style={s.container}>
@@ -285,6 +307,33 @@ export default function TrackingScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={s.inner}>
+
+        {/* Program-filter */}
+        {programNavn.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={s.chipRad}>
+              <TouchableOpacity
+                style={[s.grafChip, filterProgram === null && s.grafChipAktiv]}
+                onPress={() => setFilterProgram(null)}
+              >
+                <Text style={[s.grafChipTekst, filterProgram === null && s.grafChipTekstAktiv]}>
+                  Alle
+                </Text>
+              </TouchableOpacity>
+              {programNavn.map(navn => (
+                <TouchableOpacity
+                  key={navn}
+                  style={[s.grafChip, filterProgram === navn && s.grafChipAktiv]}
+                  onPress={() => setFilterProgram(navn)}
+                >
+                  <Text style={[s.grafChipTekst, filterProgram === navn && s.grafChipTekstAktiv]}>
+                    {navn}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        )}
 
         {/* Ukeoversikt */}
         <View style={s.ukeKort}>
@@ -326,7 +375,7 @@ export default function TrackingScreen({ navigation }: any) {
             <Text style={s.statLabel}>Compliance</Text>
           </View>
           <View style={s.statKort}>
-            <Text style={s.statVerdi}>{logger.length}</Text>
+            <Text style={s.statVerdi}>{loggerFiltrert.length}</Text>
             <Text style={s.statLabel}>Totalt logget</Text>
           </View>
         </View>
@@ -340,16 +389,16 @@ export default function TrackingScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
           <View style={s.radarKort}>
-            <RadarDiagram nå={radarNå} før={radarFør} kategorier={RADAR_KATEGORIER} />
+            <RadarDiagram nå={radarNå} før={radarFør} kategorier={RADAR_KATEGORIER} fargeFør={radarFørFarge} />
             <View style={s.radarLegend}>
               <View style={s.legendRad}>
                 <View style={[s.legendDot, { backgroundColor: colors.green }]} />
-                <Text style={s.legendTekst}>Nåværende periode</Text>
+                <Text style={s.legendTekst}>{filterProgram ? filterProgram : 'Siste periode'}</Text>
               </View>
-              {tidligereLogger.length > 0 && (
+              {(filterProgram ? logger.length > 0 : tidligereLogger.length > 0) && (
                 <View style={s.legendRad}>
-                  <View style={[s.legendDot, { backgroundColor: colors.yellow }]} />
-                  <Text style={s.legendTekst}>Forrige periode</Text>
+                  <View style={[s.legendDot, { backgroundColor: radarFørFarge }]} />
+                  <Text style={s.legendTekst}>{filterProgram ? 'Alle programmer' : 'Forrige periode'}</Text>
                 </View>
               )}
             </View>
@@ -465,14 +514,14 @@ export default function TrackingScreen({ navigation }: any) {
         {/* Logg med sparklines */}
         <View style={s.seksjon}>
           <Text style={s.seksjonTittel}>LOGG</Text>
-          {logger.length === 0 ? (
+          {loggerFiltrert.length === 0 ? (
             <View style={s.tomKort}>
               <Text style={s.tomTekst}>Ingen logger ennå</Text>
               <Text style={s.tomSub}>Start en økt fra Program-fanen</Text>
             </View>
           ) : (
             <View style={{ gap: 12 }}>
-              {grupperLoggerPerUke(logger).map(uke => (
+              {grupperLoggerPerUke(loggerFiltrert).map(uke => (
                 <View key={uke.label}>
                   <View style={s.loggUkeHeader}>
                     <Text style={s.loggUkeLabel}>{uke.label}</Text>
@@ -635,7 +684,7 @@ export default function TrackingScreen({ navigation }: any) {
 
 // ── RADAR-KOMPONENT ───────────────────────────────────────────────
 
-function RadarDiagram({ nå, før, kategorier }: { nå: Record<string, number>; før: Record<string, number>; kategorier: string[] }) {
+function RadarDiagram({ nå, før, kategorier, fargeFør = colors.yellow }: { nå: Record<string, number>; før: Record<string, number>; kategorier: string[]; fargeFør?: string }) {
   const Svg = require('react-native-svg').Svg;
   const Circle = require('react-native-svg').Circle;
   const Line = require('react-native-svg').Line;
@@ -700,13 +749,13 @@ function RadarDiagram({ nå, før, kategorier }: { nå: Record<string, number>; 
           />
         ))}
 
-        {/* Forrige periode (gul, fylt) */}
+        {/* Forrige periode / alle programmer (dynamisk farge) */}
         {harFørData && (
           <Polygon
             points={polyFør}
-            fill={colors.yellow}
+            fill={fargeFør}
             fillOpacity={0.12}
-            stroke={colors.yellow}
+            stroke={fargeFør}
             strokeWidth={1.5}
             strokeOpacity={0.6}
           />
