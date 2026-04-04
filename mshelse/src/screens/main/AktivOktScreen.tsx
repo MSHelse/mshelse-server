@@ -862,49 +862,48 @@ export default function AktivOktScreen({ navigation, route }: any) {
 
         {!hvilerNå && (
           <View style={s.loggSeksjon}>
-            {trackingTypes.includes('completed') ? (
+            {trackingTypes.includes('completed') && (
               <View style={s.completedWrapper}>
                 <Text style={s.completedTekst}>Marker settet som fullført</Text>
               </View>
-            ) : (
-              trackingTypes.map(type => {
-                const erRIR = type === 'rpe' && trackingTypes.includes('sets_reps_weight');
-                const erBegrenset = ['activation_quality', 'mobility', 'side_diff'].includes(type);
-                const maks = erRIR ? 4 : erBegrenset ? 10 : 999;
-                const infoKey = erRIR ? 'rpe_rir' : type;
-                const harInfo = !!TRACKING_INFO[infoKey];
-                return (
-                  <View key={type} style={s.trackingSeksjon}>
-                    <View style={s.trackingLabelRad}>
-                      <Text style={s.seksjonTittel}>{erRIR ? 'Reps i reserve (0–4)' : TRACKING_LABEL[type] || type}</Text>
-                      {harInfo && (
-                        <TouchableOpacity style={s.infoChip} onPress={() => setVisInfoModal(infoKey)}>
-                          <Text style={s.infoChipTekst}>?</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                    <View style={s.repStepper}>
-                      <TouchableOpacity
-                        style={s.stepperKnapp}
-                        onPress={() => setRepVerdier(prev => ({ ...prev, [type]: Math.max(0, (prev[type] || 0) - 1) }))}
-                      >
-                        <Text style={s.stepperKnappTekst}>−</Text>
+            )}
+            {trackingTypes.filter(t => t !== 'completed').map(type => {
+              const erRIR = type === 'rpe' && trackingTypes.includes('sets_reps_weight');
+              const erBegrenset = ['activation_quality', 'mobility', 'side_diff'].includes(type);
+              const maks = erRIR ? 4 : erBegrenset ? 10 : 999;
+              const infoKey = erRIR ? 'rpe_rir' : type;
+              const harInfo = !!TRACKING_INFO[infoKey];
+              return (
+                <View key={type} style={s.trackingSeksjon}>
+                  <View style={s.trackingLabelRad}>
+                    <Text style={s.seksjonTittel}>{erRIR ? 'Reps i reserve (0–4)' : TRACKING_LABEL[type] || type}</Text>
+                    {harInfo && (
+                      <TouchableOpacity style={s.infoChip} onPress={() => setVisInfoModal(infoKey)}>
+                        <Text style={s.infoChipTekst}>?</Text>
                       </TouchableOpacity>
-                      <Text style={s.stepperVerdi}>{repVerdier[type] || 0}</Text>
-                      <TouchableOpacity
-                        style={s.stepperKnapp}
-                        onPress={() => setRepVerdier(prev => ({ ...prev, [type]: Math.min(maks, (prev[type] || 0) + 1) }))}
-                      >
-                        <Text style={s.stepperKnappTekst}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                    {(erBegrenset || erRIR) && (
-                      <Text style={s.stepperMaks}>{erRIR ? 'maks 4' : 'maks 10'}</Text>
                     )}
                   </View>
-                );
-              })
-            )}
+                  <View style={s.repStepper}>
+                    <TouchableOpacity
+                      style={s.stepperKnapp}
+                      onPress={() => setRepVerdier(prev => ({ ...prev, [type]: Math.max(0, (prev[type] || 0) - 1) }))}
+                    >
+                      <Text style={s.stepperKnappTekst}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={s.stepperVerdi}>{repVerdier[type] || 0}</Text>
+                    <TouchableOpacity
+                      style={s.stepperKnapp}
+                      onPress={() => setRepVerdier(prev => ({ ...prev, [type]: Math.min(maks, (prev[type] || 0) + 1) }))}
+                    >
+                      <Text style={s.stepperKnappTekst}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {(erBegrenset || erRIR) && (
+                    <Text style={s.stepperMaks}>{erRIR ? 'maks 4' : 'maks 10'}</Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 

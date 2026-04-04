@@ -495,7 +495,8 @@ export default function TrackingScreen({ navigation }: any) {
                                   <TouchableOpacity style={s.loggHeader} onPress={() => setEkspandert(prev => { const ny = new Set(prev); ny.has(l.id) ? ny.delete(l.id) : ny.add(l.id); return ny; })}>
                                     <View style={[s.loggIkon, l.fullfort ? s.loggIkonFullfort : s.loggIkonHoppet]} />
                                     <View style={s.loggInfo}>
-                                      <Text style={s.loggNavn}>Økt {i + 1}{l.smerte != null ? ` · Smerte ${l.smerte}/10` : ''}</Text>
+                                      <Text style={s.loggNavn}>{l.programTittel || 'Økt'}</Text>
+                                      <Text style={s.loggMeta}>Økt {i + 1}{l.smerte != null ? ` · Smerte ${l.smerte}/10` : ''}</Text>
                                       {l.notat ? <Text style={s.loggNotat}>"{l.notat}"</Text> : null}
                                     </View>
                                     <View style={[s.loggStatus, l.fullfort ? s.loggStatusFullfort : s.loggStatusHoppet]}>
