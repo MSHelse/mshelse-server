@@ -26,6 +26,7 @@ export default function ProgramBuilderScreen({ navigation, route }: any) {
   const [tittel, setTittel] = useState(eksisterendeProgram?.tittel || '');
   const [valgteDager, setValgteDager] = useState<string[]>(eksisterendeProgram?.dager || ['Man', 'Ons', 'Fre']);
   const [uker, setUker] = useState(eksisterendeProgram?.uker || 4);
+  const [frekvensPerDag, setFrekvensPerDag] = useState(eksisterendeProgram?.frekvensPerDag || 1);
   const [akt, setAkt] = useState(starterAkt);
   const [ovelser, setOvelser] = useState<any[]>(eksisterendeProgram?.ovelser || []);
   const [tilgjengeligeOvelser, setTilgjengeligeOvelser] = useState<any[]>([]);
@@ -37,6 +38,7 @@ export default function ProgramBuilderScreen({ navigation, route }: any) {
   const [venterPaRender, setVenterPaRender] = useState(false);
   const [genererHarKjørt, setGenererHarKjørt] = useState(false);
   const [valideringFeil, setValideringFeil] = useState<string | null>(null);
+  const [genererteProgrammer, setGenererteProgrammer] = useState<any[]>([]);
 
   useEffect(() => {
     hentOvelser();
@@ -86,12 +88,21 @@ export default function ProgramBuilderScreen({ navigation, route }: any) {
         }
         return;
       }
-      const program = await res.json();
-      if (program.tittel) setTittel(program.tittel);
-      if (program.akt) setAkt(program.akt);
-      if (program.uker) setUker(program.uker);
-      if (program.dager?.length) setValgteDager(program.dager);
-      if (program.ovelser?.length) setOvelser(program.ovelser);
+      const data = await res.json();
+      const programmer = data.programmer || [data];
+      if (programmer.length > 1) {
+        // Flere programmer – lagres direkte uten manuell redigering
+        setGenererteProgrammer(programmer);
+      } else {
+        // Ett program – fyll inn i redigeringsskjemaet som før
+        const program = programmer[0] || {};
+        if (program.tittel) setTittel(program.tittel);
+        if (program.akt) setAkt(program.akt);
+        if (program.uker) setUker(program.uker);
+        if (program.frekvensPerDag) setFrekvensPerDag(program.frekvensPerDag);
+        if (program.dager?.length) setValgteDager(program.dager);
+        if (program.ovelser?.length) setOvelser(program.ovelser);
+      }
     } catch (e) {
       console.error(e);
       setGenFeil('server_feil');
@@ -182,29 +193,52 @@ Svar KUN med JSON-array, ingen forklaringer:
       baselineSporsmal = await genererBaselineSporsmal(fraAssessment);
     }
 
-    const data = {
-      tittel: tittel.trim(),
-      dager: valgteDager,
-      uker,
-      akt,
-      ovelser,
-      aktiv: true,
-      okterFullfort: 0,
-      okterTotalt: valgteDager.length * uker,
-      uke: 1,
-      source: 'user_created' as const,
-      assessmentId: fraAssessment?.id || null,
-      baselineSporsmal,
-    };
-
     try {
-      if (eksisterendeProgram) {
-        await updateDoc(doc(db, 'users', user.uid, 'programs', eksisterendeProgram.id), data);
+      if (genererteProgrammer.length > 1) {
+        // Lagre alle AI-genererte programmer
+        for (const p of genererteProgrammer) {
+          const frekvens = p.frekvensPerDag || 1;
+          await addDoc(collection(db, 'users', user.uid, 'programs'), {
+            tittel: p.tittel,
+            dager: p.dager,
+            uker: p.uker,
+            akt: p.akt,
+            frekvensPerDag: frekvens,
+            ovelser: p.ovelser || [],
+            aktiv: true,
+            okterFullfort: 0,
+            okterTotalt: (p.dager?.length || 3) * (p.uker || 4) * frekvens,
+            uke: 1,
+            source: 'ai_generated' as const,
+            assessmentId: fraAssessment?.id || null,
+            baselineSporsmal: p.akt === (genererteProgrammer[0]?.akt) ? baselineSporsmal : [],
+            opprettet: serverTimestamp(),
+          });
+        }
       } else {
-        await addDoc(collection(db, 'users', user.uid, 'programs'), {
-          ...data,
-          opprettet: serverTimestamp(),
-        });
+        const data = {
+          tittel: tittel.trim(),
+          dager: valgteDager,
+          uker,
+          akt,
+          frekvensPerDag,
+          ovelser,
+          aktiv: true,
+          okterFullfort: 0,
+          okterTotalt: valgteDager.length * uker * frekvensPerDag,
+          uke: 1,
+          source: 'user_created' as const,
+          assessmentId: fraAssessment?.id || null,
+          baselineSporsmal,
+        };
+        if (eksisterendeProgram) {
+          await updateDoc(doc(db, 'users', user.uid, 'programs', eksisterendeProgram.id), data);
+        } else {
+          await addDoc(collection(db, 'users', user.uid, 'programs'), {
+            ...data,
+            opprettet: serverTimestamp(),
+          });
+        }
       }
       navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
     } catch (e) {
@@ -423,6 +457,21 @@ Svar KUN med JSON-array, ingen forklaringer:
         </View>
 
         <View style={s.feltGruppe}>
+          <Text style={s.feltLabel}>FREKVENS PER DAG</Text>
+          <View style={s.chipRad}>
+            {[1, 2, 3, 4, 5].map(n => (
+              <TouchableOpacity
+                key={n}
+                style={[s.chip, frekvensPerDag === n && s.chipAktiv]}
+                onPress={() => setFrekvensPerDag(n)}
+              >
+                <Text style={[s.chipTekst, frekvensPerDag === n && s.chipTekstAktiv]}>{n}×</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={s.feltGruppe}>
           <Text style={s.feltLabel}>ØVELSER</Text>
           {ovelser.length === 0 ? (
             <View style={s.tomKort}>
@@ -474,11 +523,22 @@ Svar KUN med JSON-array, ingen forklaringer:
           </View>
         )}
 
-        <View style={s.oppsummering}>
-          <Text style={s.oppsummeringTekst}>
-            {valgteDager.length} dager/uke · {uker} uker · {valgteDager.length * uker} økter totalt
-          </Text>
-        </View>
+        {genererteProgrammer.length > 1 ? (
+          <View style={[s.oppsummering, { gap: 6 }]}>
+            <Text style={[s.oppsummeringTekst, { color: colors.green, marginBottom: 4 }]}>AI genererte {genererteProgrammer.length} programmer:</Text>
+            {genererteProgrammer.map((p, i) => (
+              <Text key={i} style={s.oppsummeringTekst}>
+                {p.tittel} · {p.dager?.length || 0} dager/uke{(p.frekvensPerDag || 1) > 1 ? ` · ${p.frekvensPerDag}× daglig` : ''}
+              </Text>
+            ))}
+          </View>
+        ) : (
+          <View style={s.oppsummering}>
+            <Text style={s.oppsummeringTekst}>
+              {valgteDager.length} dager/uke · {uker} uker · {valgteDager.length * uker} økter totalt
+            </Text>
+          </View>
+        )}
 
       </ScrollView>
     </SafeAreaView>

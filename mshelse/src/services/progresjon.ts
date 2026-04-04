@@ -54,13 +54,21 @@ export function vurderProgresjon(
     return { klar: false, akt, årsak: 'for tidlig' };
   }
 
-  // Programlogger, fullførte, nyeste først
-  const programLogger = logger
-    .filter((l: any) => l.programId === program.id && l.fullfort)
-    .slice(0, 3);
+  // Programlogger, fullførte, nyeste først – grupper per unik dag
+  const alleFullforte = logger.filter((l: any) => l.programId === program.id && l.fullfort);
+  const dagMap = new Map<string, any[]>();
+  for (const l of alleFullforte) {
+    const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+    const nøkkel = dato.toDateString();
+    if (!dagMap.has(nøkkel)) dagMap.set(nøkkel, []);
+    dagMap.get(nøkkel)!.push(l);
+  }
+  // Ta siste 3 unike treningsdager (Map bevarer innsettingsrekkefølge = nyest først)
+  const sisteUnike = Array.from(dagMap.values()).slice(0, 3);
+  const programLogger = sisteUnike.flat();
 
-  if (programLogger.length < 2) {
-    return { klar: false, akt, årsak: 'for få logger' };
+  if (sisteUnike.length < 2) {
+    return { klar: false, akt, årsak: 'for få treningsdager' };
   }
 
   // Bygg sett med alle tracking-typer i programmet (støtter gammelt + nytt skjema)

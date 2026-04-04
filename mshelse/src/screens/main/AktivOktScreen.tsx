@@ -708,6 +708,22 @@ export default function AktivOktScreen({ navigation, route }: any) {
         <View style={[s.progresjonFill, { width: `${fremgang}%` as any }]} />
       </View>
 
+      {(program?.frekvensPerDag || 1) > 1 && (() => {
+        const iDagStr = new Date().toDateString();
+        const gjortIDag = tidligereLogger.filter(l => {
+          const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+          return dato.toDateString() === iDagStr;
+        }).length;
+        const mål = program.frekvensPerDag;
+        return (
+          <View style={{ backgroundColor: colors.surface2, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 12, color: gjortIDag >= mål ? colors.green : colors.muted, fontWeight: '500' }}>
+              {gjortIDag >= mål ? `Alle ${mål} ganger gjort i dag ✓` : `${gjortIDag} av ${mål} ganger gjort i dag`}
+            </Text>
+          </View>
+        );
+      })()}
+
       <ScrollView contentContainerStyle={s.inner}>
 
         {/* Video øverst */}

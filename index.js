@@ -300,26 +300,35 @@ Konteksten handler om HVORFOR og KLINISK RELEVANS – ikke om HVORDAN øvelsen g
 Feil eksempel: "Fokuser på å holde korsryggen nøytral og senk deg sakte ned."
 Riktig eksempel: "Valgt fordi kartleggingen viste overaktiv iliopsoas og svak gluteus maximus. Denne øvelsen adresserer direkte ubalansen som gir deg korsryggsmerter ved stillesitting."
 
+TO-PROGRAM-REGEL (klinisk skjønn):
+Vurder basert på kartleggingen og øvelsenes type om brukeren trenger to separate programmer:
+1. Et høyfrekvent program (tøying/mobilisering) for øvelser som klinisk sett bør gjøres 3-5 ganger daglig – typisk ved akutt fase, stivhet, eller mobiliseringsbehov. Sett frekvensPerDag = 3, 4 eller 5. Dager = 5-7 per uke.
+2. Et aktiverings-/styrkeprogram med frekvensPerDag = 1 og standard treningsdager (2-4 per uke).
+Lag to programmer KUN hvis kartleggingen tilsier at høy daglig frekvens er klinisk nødvendig. Hvis ikke, lag ett program med frekvensPerDag = 1.
+
 RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
 {
-  "tittel": "kort beskrivende tittel maks 6 ord",
-  "akt": 1,
-  "uker": 4,
-  "dager": ["Man", "Ons", "Fre"],
-  "ovelser": [
+  "programmer": [
     {
-      "exerciseId": "id fra biblioteket",
-      "navn": "navn fra biblioteket",
-      "purposeId": "id fra øvelsens purposes",
-      "formaalLabel": "label fra purpose",
-      "instruksjon": "instruksjon fra purpose",
-      "personligKontekst": "1-3 setninger tilpasset denne brukerens spesifikke funn og kompensasjonsmønstre",
-      "tracking_types": ["fra purpose"],
-      "tracking_type": "første tracking type",
-      "sets": 3,
-      "reps": 10,
-      "hold": null,
-      "tempo": null
+      "tittel": "kort beskrivende tittel maks 6 ord",
+      "akt": 1,
+      "uker": 4,
+      "frekvensPerDag": 1,
+      "dager": ["mandag", "onsdag", "fredag"],
+      "ovelser": [
+        {
+          "exerciseId": "id fra biblioteket",
+          "navn": "navn fra biblioteket",
+          "instruksjon": "instruksjon fra øvelsen",
+          "personligKontekst": "1-3 setninger tilpasset denne brukerens spesifikke funn og kompensasjonsmønstre",
+          "tracking_types": ["fra øvelsen"],
+          "tracking_type": "første tracking type",
+          "sets": 3,
+          "reps": 10,
+          "hold": null,
+          "tempo": null
+        }
+      ]
     }
   ]
 }`;
@@ -329,13 +338,8 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
       name: o.name,
       bodyParts: o.bodyParts || [],
       act: o.act || [],
-      purposes: (o.purposes || []).map((p) => ({
-        id: p.id,
-        label: p.label,
-        instruction: p.instruction,
-        tracking_types: p.tracking_types || (p.tracking_type ? [p.tracking_type] : ['completed']),
-        kliniskNotat: p.kliniskNotat || '',
-      })),
+      tracking_types: o.tracking_types || (o.tracking_type ? [o.tracking_type] : ['completed']),
+      kliniskNotat: o.kliniskNotat || '',
     }));
 
     // Bygg kontekst avhengig av om det er første kartlegging eller reassessment
@@ -388,8 +392,10 @@ Neste steg: ${fraAssessment?.triage?.next_step || '–'}`;
     if (jsonStart === -1 || jsonEnd === -1) {
       return res.status(500).json({ error: 'Ugyldig svar fra AI' });
     }
-    const program = JSON.parse(tekst.substring(jsonStart, jsonEnd + 1));
-    res.json(program);
+    const parsed = JSON.parse(tekst.substring(jsonStart, jsonEnd + 1));
+    // Støtter både nytt format { programmer: [...] } og gammelt enkeltprogram-format
+    const programmer = parsed.programmer || [parsed];
+    res.json({ programmer });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

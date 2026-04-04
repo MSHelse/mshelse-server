@@ -12,6 +12,7 @@ export default function HjemScreen({ navigation }: any) {
   const [laster, setLaster] = useState(true);
   const [sisteAssessment, setSisteAssessment] = useState<any>(null);
   const [aktiveProgrammer, setAktiveProgrammer] = useState<any[]>([]);
+  const [dagensLogger, setDagensLogger] = useState<any[]>([]);
   const [progresjonsBanner, setProgresjonsBanner] = useState<{ program: any; akt: number } | null>(null);
 
   const fornavn = auth.currentUser?.displayName?.split(' ')[0] || 'deg';
@@ -48,6 +49,11 @@ export default function HjemScreen({ navigation }: any) {
         query(collection(db, 'users', user.uid, 'logger'), orderBy('dato', 'desc'), limit(20))
       );
       const logger = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const iDagStr = new Date().toDateString();
+      setDagensLogger(logger.filter(l => {
+        const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+        return dato.toDateString() === iDagStr;
+      }));
       setProgresjonsBanner(sjekkProgresjon(aktive, logger));
     } catch (e) {
       console.error(e);
@@ -65,6 +71,9 @@ export default function HjemScreen({ navigation }: any) {
 
   // Finn dagens program – første aktive program der i dag er treningsdag
   const dagensProgram = aktiveProgrammer.find(p => erTreningsdagIDag(p)) || null;
+  const frekvensIDag = dagensProgram?.frekvensPerDag || 1;
+  const gjortIDag = dagensLogger.filter(l => l.programId === dagensProgram?.id && l.fullfort).length;
+  const alleGjortIDag = frekvensIDag > 1 && gjortIDag >= frekvensIDag;
 
   function hilsen() {
     const t = new Date().getHours();
@@ -177,10 +186,19 @@ export default function HjemScreen({ navigation }: any) {
                   <View>
                     <Text style={s.dagensOktLabel}>I DAG</Text>
                     <Text style={s.dagensOktTittel}>{dagensProgram.tittel}</Text>
-                    <View style={[s.dagensOktBadge, { alignSelf: 'flex-start', marginTop: 6 }]}>
-                      <Text style={s.dagensOktBadgeTekst}>
-                        {(dagensProgram.ovelser || []).length} øvelser
-                      </Text>
+                    <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                      <View style={[s.dagensOktBadge, { alignSelf: 'flex-start' }]}>
+                        <Text style={s.dagensOktBadgeTekst}>
+                          {(dagensProgram.ovelser || []).length} øvelser
+                        </Text>
+                      </View>
+                      {frekvensIDag > 1 && (
+                        <View style={[s.dagensOktBadge, alleGjortIDag && { backgroundColor: colors.greenDim, borderColor: colors.greenBorder }]}>
+                          <Text style={s.dagensOktBadgeTekst}>
+                            {gjortIDag}/{frekvensIDag} ganger i dag
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -207,7 +225,9 @@ export default function HjemScreen({ navigation }: any) {
                   style={s.dagensStartKnapp}
                   onPress={() => navigation.navigate('AktivOkt', { program: dagensProgram, assessment: sisteAssessment })}
                 >
-                  <Text style={s.dagensStartTekst}>Start dagens økt →</Text>
+                  <Text style={s.dagensStartTekst}>
+                    {alleGjortIDag ? `Gjort ${frekvensIDag}× – start en gang til →` : frekvensIDag > 1 && gjortIDag > 0 ? `Start gang ${gjortIDag + 1} av ${frekvensIDag} →` : 'Start dagens økt →'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ) : aktiveProgrammer.length > 0 ? (

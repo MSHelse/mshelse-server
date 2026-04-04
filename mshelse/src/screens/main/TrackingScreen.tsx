@@ -32,6 +32,21 @@ function getMandagIUken(date: Date): Date {
   return d;
 }
 
+function grupperLoggerPerDag(logger: any[]): { dagLabel: string; logger: any[]; fullfort: number }[] {
+  const dagMap = new Map<string, any[]>();
+  logger.forEach(l => {
+    const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+    const nøkkel = dato.toDateString();
+    if (!dagMap.has(nøkkel)) dagMap.set(nøkkel, []);
+    dagMap.get(nøkkel)!.push(l);
+  });
+  return Array.from(dagMap.entries()).map(([, logs]) => {
+    const dato = logs[0].dato?.toDate ? logs[0].dato.toDate() : new Date(logs[0].dato);
+    const dagLabel = dato.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' });
+    return { dagLabel, logger: logs, fullfort: logs.filter(l => l.fullfort).length };
+  });
+}
+
 function grupperLoggerPerUke(logger: any[]): { label: string; logger: any[]; fullfort: number }[] {
   const dagensMandag = getMandagIUken(new Date());
   const ukeMap = new Map<number, any[]>();
@@ -172,29 +187,35 @@ export default function TrackingScreen({ navigation }: any) {
       ) as { key: string; navn: string; formaalLabel: string }[]
     : [];
 
-  // Grafdata for valgt øvelse (matcher på navn + formaalLabel)
+  // Grafdata for valgt øvelse – aggregert til daglig snitt
   function grafDataForOvelse(): { dato: Date; verdi: number }[] {
     if (!valgtProgram || !valgtOvelse) return [];
     const [ovNavn, ovFormaal] = valgtOvelse.split('||');
-    return logger
+    const dagMap = new Map<string, { dato: Date; verdier: number[] }>();
+    logger
       .filter((l: any) => l.programTittel === valgtProgram && l.fullfort)
-      .map((l: any) => {
+      .forEach((l: any) => {
         const ovelse = (l.ovelser || []).find((o: any) =>
           o.navn === ovNavn && (o.formaalLabel || '') === ovFormaal
         );
-        if (!ovelse) return null;
+        if (!ovelse) return;
         const sett = (ovelse.sett || []).filter((s: any) => !s.hoppetOver);
-        if (sett.length === 0) return null;
+        if (sett.length === 0) return;
         const verdier = sett.flatMap((s: any) =>
           Object.values(s.verdier || {}).filter((v: any) => typeof v === 'number')
         ) as number[];
-        if (verdier.length === 0) return null;
-        const snitt = verdier.reduce((a, b) => a + b, 0) / verdier.length;
+        if (verdier.length === 0) return;
         const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
-        return { dato, verdi: snitt };
-      })
-      .filter(Boolean)
-      .reverse() as { dato: Date; verdi: number }[];
+        const nøkkel = dato.toDateString();
+        if (!dagMap.has(nøkkel)) dagMap.set(nøkkel, { dato, verdier: [] });
+        dagMap.get(nøkkel)!.verdier.push(...verdier);
+      });
+    return Array.from(dagMap.values())
+      .map(({ dato, verdier }) => ({
+        dato,
+        verdi: verdier.reduce((a, b) => a + b, 0) / verdier.length,
+      }))
+      .sort((a, b) => a.dato.getTime() - b.dato.getTime());
   }
 
   const grafData = grafDataForOvelse();
@@ -233,15 +254,18 @@ export default function TrackingScreen({ navigation }: any) {
     const dag = idag.getDay();
     const mandag = new Date(idag);
     mandag.setDate(idag.getDate() - (dag === 0 ? 6 : dag - 1));
+    const frekvens = aktivtProgram?.frekvensPerDag || 1;
     return DAGER.map((navn, i) => {
       const dato = new Date(mandag);
       dato.setDate(mandag.getDate() + i);
       const erIdag = dato.toDateString() === idag.toDateString();
-      const logg = logger.find(l => {
+      const dagLogger = logger.filter(l => {
         const ld = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
         return ld.toDateString() === dato.toDateString();
       });
-      return { navn, dato, erIdag, logg };
+      const logg = dagLogger[0] || null;
+      const antallFullfort = dagLogger.filter(l => l.fullfort).length;
+      return { navn, dato, erIdag, logg, antallFullfort, frekvens };
     });
   }
 
@@ -279,8 +303,11 @@ export default function TrackingScreen({ navigation }: any) {
                     d.logg?.fullfort && s.ukeDagTekstFullfort,
                     d.logg && !d.logg.fullfort && s.ukeDagTekstHoppet,
                     d.erIdag && !d.logg && s.ukeDagTekstIdag,
+                    d.frekvens > 1 && { fontSize: 8 },
                   ]}>
-                    {d.logg?.fullfort ? '✓' : d.logg ? '✕' : d.erIdag ? '·' : ''}
+                    {d.frekvens > 1 && d.antallFullfort > 0
+                      ? `${d.antallFullfort}/${d.frekvens}`
+                      : d.logg?.fullfort ? '✓' : d.logg ? '✕' : d.erIdag ? '·' : ''}
                   </Text>
                 </View>
               </View>
@@ -450,75 +477,111 @@ export default function TrackingScreen({ navigation }: any) {
                   <View style={s.loggUkeHeader}>
                     <Text style={s.loggUkeLabel}>{uke.label}</Text>
                     <Text style={s.loggUkeCompliance}>
-                      {uke.fullfort} av {uke.logger.length} fullført
+                      {uke.fullfort} av {(aktivtProgram?.dager?.length || 1) * (aktivtProgram?.frekvensPerDag || 1)} fullført
                     </Text>
                   </View>
                   <View style={s.loggListe}>
-                    {uke.logger.map((l, i) => {
-                      const erEkspandert = ekspandert.has(l.id);
-                      const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
-                      return (
-                        <View key={l.id} style={[s.loggRad, i < uke.logger.length - 1 && s.loggRadBorder]}>
-                          <TouchableOpacity
-                            style={s.loggHeader}
-                            onPress={() => setEkspandert(prev => {
-                              const ny = new Set(prev);
-                              ny.has(l.id) ? ny.delete(l.id) : ny.add(l.id);
-                              return ny;
-                            })}
-                          >
-                            <View style={[s.loggIkon, l.fullfort ? s.loggIkonFullfort : s.loggIkonHoppet]} />
-                            <View style={s.loggInfo}>
-                              <Text style={s.loggNavn}>{l.programTittel || 'Økt'}</Text>
-                              <Text style={s.loggMeta}>
-                                {dato.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}
-                                {l.smerte != null ? ` · Smerte ${l.smerte}/10` : ''}
-                              </Text>
-                              {l.notat ? <Text style={s.loggNotat}>"{l.notat}"</Text> : null}
+                    {(aktivtProgram?.frekvensPerDag || 1) > 1
+                      ? grupperLoggerPerDag(uke.logger).map((dag, di) => (
+                          <View key={dag.dagLabel} style={[di < grupperLoggerPerDag(uke.logger).length - 1 && s.loggRadBorder]}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 }}>
+                              <Text style={[s.loggMeta, { color: colors.muted }]}>{dag.dagLabel}</Text>
+                              <Text style={s.loggUkeCompliance}>{dag.fullfort} av {aktivtProgram?.frekvensPerDag || 1}</Text>
                             </View>
-                            <View style={[s.loggStatus, l.fullfort ? s.loggStatusFullfort : s.loggStatusHoppet]}>
-                              <Text style={[s.loggStatusTekst, l.fullfort ? s.loggStatusTekstF : s.loggStatusTekstH]}>
-                                {l.fullfort ? 'Fullført' : 'Hoppet'}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-
-                          {erEkspandert && (l.ovelser || []).length > 0 && (
-                            <View style={s.loggDetaljer}>
-                              {(l.ovelser || []).map((o: any, j: number) => {
-                                const spark = sparklineForOvelse(o.navn);
-                                const sett = (o.sett || []);
-                                return (
-                                  <View key={j} style={s.loggOvelseRad}>
-                                    <View style={s.loggOvelseHeader}>
-                                      {spark.length > 1 && (
-                                        <Sparkline data={spark} farge={colors.green} />
-                                      )}
-                                      <Text style={s.loggOvelseNavn}>{o.navn}</Text>
+                            {dag.logger.map((l: any, i: number) => {
+                              const erEkspandert = ekspandert.has(l.id);
+                              return (
+                                <View key={l.id} style={[{ paddingLeft: 12 }, i < dag.logger.length - 1 && s.loggRadBorder]}>
+                                  <TouchableOpacity style={s.loggHeader} onPress={() => setEkspandert(prev => { const ny = new Set(prev); ny.has(l.id) ? ny.delete(l.id) : ny.add(l.id); return ny; })}>
+                                    <View style={[s.loggIkon, l.fullfort ? s.loggIkonFullfort : s.loggIkonHoppet]} />
+                                    <View style={s.loggInfo}>
+                                      <Text style={s.loggNavn}>Økt {i + 1}{l.smerte != null ? ` · Smerte ${l.smerte}/10` : ''}</Text>
+                                      {l.notat ? <Text style={s.loggNotat}>"{l.notat}"</Text> : null}
                                     </View>
-                                    <View style={s.settBrikker}>
-                                      {sett.map((s2: any, k: number) => {
-                                        const verdier = Object.values(s2.verdier || {}).filter((v: any) => typeof v === 'number') as number[];
-                                        const visVerdi = verdier.length > 0
-                                          ? Math.round(verdier.reduce((a, b) => a + b, 0) / verdier.length * 10) / 10
-                                          : null;
+                                    <View style={[s.loggStatus, l.fullfort ? s.loggStatusFullfort : s.loggStatusHoppet]}>
+                                      <Text style={[s.loggStatusTekst, l.fullfort ? s.loggStatusTekstF : s.loggStatusTekstH]}>{l.fullfort ? 'Fullført' : 'Hoppet'}</Text>
+                                    </View>
+                                  </TouchableOpacity>
+                                  {erEkspandert && (l.ovelser || []).length > 0 && (
+                                    <View style={s.loggDetaljer}>
+                                      {(l.ovelser || []).map((o: any, j: number) => {
+                                        const spark = sparklineForOvelse(o.navn);
                                         return (
-                                          <View key={k} style={[s.settBrikke, s2.hoppetOver && s.settBrikkeHoppet]}>
-                                            <Text style={[s.settBrikkeTekst, s2.hoppetOver && s.settBrikkeTekstHoppet]}>
-                                              {s2.hoppetOver ? '–' : visVerdi != null ? visVerdi : '✓'}
-                                            </Text>
+                                          <View key={j} style={s.loggOvelseRad}>
+                                            <View style={s.loggOvelseHeader}>
+                                              {spark.length > 1 && <Sparkline data={spark} farge={colors.green} />}
+                                              <Text style={s.loggOvelseNavn}>{o.navn}</Text>
+                                            </View>
+                                            <View style={s.settBrikker}>
+                                              {(o.sett || []).map((s2: any, k: number) => {
+                                                const verdier = Object.values(s2.verdier || {}).filter((v: any) => typeof v === 'number') as number[];
+                                                const visVerdi = verdier.length > 0 ? Math.round(verdier.reduce((a: number, b: number) => a + b, 0) / verdier.length * 10) / 10 : null;
+                                                return (
+                                                  <View key={k} style={[s.settBrikke, s2.hoppetOver && s.settBrikkeHoppet]}>
+                                                    <Text style={[s.settBrikkeTekst, s2.hoppetOver && s.settBrikkeTekstHoppet]}>{s2.hoppetOver ? '–' : visVerdi != null ? visVerdi : '✓'}</Text>
+                                                  </View>
+                                                );
+                                              })}
+                                            </View>
                                           </View>
                                         );
                                       })}
                                     </View>
-                                  </View>
-                                );
-                              })}
+                                  )}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        ))
+                      : uke.logger.map((l: any, i: number) => {
+                          const erEkspandert = ekspandert.has(l.id);
+                          const dato = l.dato?.toDate ? l.dato.toDate() : new Date(l.dato);
+                          return (
+                            <View key={l.id} style={[s.loggRad, i < uke.logger.length - 1 && s.loggRadBorder]}>
+                              <TouchableOpacity style={s.loggHeader} onPress={() => setEkspandert(prev => { const ny = new Set(prev); ny.has(l.id) ? ny.delete(l.id) : ny.add(l.id); return ny; })}>
+                                <View style={[s.loggIkon, l.fullfort ? s.loggIkonFullfort : s.loggIkonHoppet]} />
+                                <View style={s.loggInfo}>
+                                  <Text style={s.loggNavn}>{l.programTittel || 'Økt'}</Text>
+                                  <Text style={s.loggMeta}>
+                                    {dato.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    {l.smerte != null ? ` · Smerte ${l.smerte}/10` : ''}
+                                  </Text>
+                                  {l.notat ? <Text style={s.loggNotat}>"{l.notat}"</Text> : null}
+                                </View>
+                                <View style={[s.loggStatus, l.fullfort ? s.loggStatusFullfort : s.loggStatusHoppet]}>
+                                  <Text style={[s.loggStatusTekst, l.fullfort ? s.loggStatusTekstF : s.loggStatusTekstH]}>{l.fullfort ? 'Fullført' : 'Hoppet'}</Text>
+                                </View>
+                              </TouchableOpacity>
+                              {erEkspandert && (l.ovelser || []).length > 0 && (
+                                <View style={s.loggDetaljer}>
+                                  {(l.ovelser || []).map((o: any, j: number) => {
+                                    const spark = sparklineForOvelse(o.navn);
+                                    const sett = (o.sett || []);
+                                    return (
+                                      <View key={j} style={s.loggOvelseRad}>
+                                        <View style={s.loggOvelseHeader}>
+                                          {spark.length > 1 && <Sparkline data={spark} farge={colors.green} />}
+                                          <Text style={s.loggOvelseNavn}>{o.navn}</Text>
+                                        </View>
+                                        <View style={s.settBrikker}>
+                                          {sett.map((s2: any, k: number) => {
+                                            const verdier = Object.values(s2.verdier || {}).filter((v: any) => typeof v === 'number') as number[];
+                                            const visVerdi = verdier.length > 0 ? Math.round(verdier.reduce((a: number, b: number) => a + b, 0) / verdier.length * 10) / 10 : null;
+                                            return (
+                                              <View key={k} style={[s.settBrikke, s2.hoppetOver && s.settBrikkeHoppet]}>
+                                                <Text style={[s.settBrikkeTekst, s2.hoppetOver && s.settBrikkeTekstHoppet]}>{s2.hoppetOver ? '–' : visVerdi != null ? visVerdi : '✓'}</Text>
+                                              </View>
+                                            );
+                                          })}
+                                        </View>
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                              )}
                             </View>
-                          )}
-                        </View>
-                      );
-                    })}
+                          );
+                        })}
                   </View>
                 </View>
               ))}
