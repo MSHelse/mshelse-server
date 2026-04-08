@@ -1,7 +1,7 @@
 # MS Helse – Architecture & Decision Log
 
 **Purpose:** Enable a new developer or AI to understand the full system without reading 10+ chat sessions.
-**Last updated:** 4. april 2026 · Covers sessions 1–10 (claude.ai) + Claude Code sessions 1–4.
+**Last updated:** 8. april 2026 · Covers sessions 1–10 (claude.ai) + Claude Code sessions 1–5.
 
 ---
 
@@ -76,29 +76,35 @@ Components fetch from Firebase directly (via Firestore SDK). Shared UI state liv
 
 ## 2. The Rehabilitation Model (Clinical Core)
 
-The entire app is structured around a three-act rehabilitation journey. This model drives the UI, the AI prompts, the progression logic, and the program generation.
+The entire app is structured around a four-act rehabilitation journey. This model drives the UI, the AI prompts, the progression logic, and the program generation.
 
-### The Three Acts
+### The Four Acts
 
-**Akt 1 – Få kontroll** (Gain control): Deactivation/mobilization + low-threshold activation. 1–6 weeks. Pain is the primary metric. The patient is in a protective posture — the goal is to calm the system down.
+**Akt 1 – Få kontroll** (Gain control): Deactivation/mobilization + low-threshold activation. 2–4 weeks. Pain is the primary metric. The patient is in a protective posture — the goal is to calm the system down.
 
-**Akt 2 – Rette opp** (Correct): Activation with progression, stability, compensation pattern correction. Activation here is more demanding — building strength and neuromuscular connection under load.
+**Akt 2 – Lett stabilitet** (Light stability): Activation with support, no heavy load. 3–4 weeks. Compensation patterns are addressed gently. The split from the original Akt 2 was made because light stability exercises (assisted, unloaded) are clinically distinct from heavier stability work — grouping them together caused too large a jump from Akt 1.
 
-**Akt 3 – Vokse** (Grow): Progressive strength, endurance, sleep/nutrition/stress as active tools. Lifelong use.
+**Akt 3 – Tyngre stabilitet** (Heavier stability): Stability without assistance, light load, movement quality under control. 4–6 weeks. The user must hold correct position when it costs something.
 
-### Why three acts and not a simpler model?
+**Akt 4 – Bygg styrke** (Build strength): Progressive strength, endurance, sleep/nutrition/stress as active tools. 4–8 weeks. Lifelong use.
 
-Quang's clinical experience shows that pain relief alone is insufficient — patients who stop after pain disappears relapse. The three-act model explicitly carries users beyond pain into performance. Acts can overlap: a user might have their shoulder in Akt 1 and their hip in Akt 2 simultaneously. The akt indicator ties to a specific assessment, not the whole body. (Sessions 1, 3)
+### Why four acts instead of three?
+
+The original three-act model had a jump between Akt 1 (pain control) and Akt 2 (stability) that was clinically too large. Light stability exercises (e.g., assisted activation) belong in a separate act from heavier stability work (e.g., goblet squat with eccentric focus). Adding Akt 2 as a "light stability" bridge prevents users from being pushed into exercises that are too demanding immediately after pain control. (Claude Code session 5)
+
+Acts can overlap: a user might have their shoulder in Akt 1 and their hip in Akt 2 simultaneously. The akt indicator ties to a specific assessment, not the whole body. (Sessions 1, 3)
 
 ### Triage Logic
 
-Self-reported pain level maps to starting act:
+Self-reported pain level maps to starting act (pending update for 4-act model):
 - 7–10 → Akt 1
 - 4–6 → Akt 1 + 2 (parallel)
 - 1–3 → Akt 2
 - 0 → Akt 2 or 3 depending on goals
 
 **Non-obvious:** Many users have no pain but stiffness. The system handles this. (Session 6)
+
+**Note (Claude Code session 5):** Triage thresholds will be updated when AI prompts are revised to reflect the four-act model.
 
 ---
 
@@ -177,25 +183,56 @@ If the conclusion is `fortsett` or `ny_kartlegging`, the program stays active. (
 
 **File:** `src/services/progresjon.ts` — imported by HjemScreen and AktivOktScreen
 
-**Logic:**
-AND-logic — ALL clinical tracking types must reach threshold over the last 2–3 logs:
-- `activation_quality` ≥ 8
-- `mobility` ≥ 8
-- `contact_reps` ≥ 85% of rep target
-- `rpe` ≤ 7 AND drop ≥ 1.5 from first log
-- `side_diff` ≤ 3
+**`ProgresjonResultat` interface:**
+```typescript
+{
+  klar: boolean;              // criteria met + ≥40% complete
+  snartKlar: boolean;         // Akt 1 only: almost ready, continue a bit
+  tidligProgresjon: boolean;  // criteria met on last 3 unique days (no 40% gate)
+  rpeSignal: 'for_lett' | 'optimal' | 'for_hardt' | null;
+  failsafe: boolean;          // akt ≥ 2 + smerte ≥ 4 in recent sessions
+  akt: number;
+  årsak: string;
+}
+```
 
-Non-clinical types (`sets_reps`, `sets_reps_weight`, `completed`) are ignored.
+**Gatekeeper exercises:**
+Each exercise can be marked `gatekeeper: true` in Firestore (`exercises/{id}`). Each program exercise can have `gatekeeperOverride: true | false | null` (null = follow library default). Only gatekeeper exercises' tracking data counts toward progression criteria. If no exercises are marked as gatekeepers, all exercises are used (backward compatibility).
 
-Akt 1 has an extra requirement: pain must be 0.
+**Why gatekeepers?**
+A program for lower back pain might include mobilization (supplementary) + activation (supplementary) + goblet squat (primary indicator). Progress on goblet squat is what clinically matters — not whether the mobilization exercises are easy. Without gatekeepers, improving on supplementary exercises could falsely trigger progression. (Claude Code session 5)
 
-Trigger conditions: ≥ 40% of program completed, ≥ 2 logged sessions.
+**Criteria (AND-logic on gatekeeper exercises, last 3 unique training days):**
+
+| Type | Akt 1 threshold | Akt 2–4 threshold |
+|------|----------------|------------------|
+| `activation_quality` | ≥ 7 | ≥ 8 |
+| `mobility` | ≥ 7 | ≥ 8 |
+| `contact_reps` | ≥ 85% rep target | ≥ 85% rep target |
+| `side_diff` | ≤ 3 | ≤ 3 |
+| smerte (session-level) | ≤ 3 | n/a (failsafe only) |
+
+**RPE is NOT a progression criterion** — it's an adjustment signal only:
+- avg RPE < 3.5 → `rpeSignal: 'for_lett'` (increase difficulty)
+- avg RPE 3.5–6.5 → `rpeSignal: 'optimal'`
+- avg RPE > 6.5 → `rpeSignal: 'for_hardt'` (too hard)
+
+This signal is passed to the reassessment AI as context, not surfaced directly to users. `rpe`, `sets_reps`, `sets_reps_weight`, and `completed` are ignored in progression criteria. (Claude Code session 5)
+
+**`snartKlar` (Akt 1 only):** smerte ≤ 3 AND activation 5–6 AND mobility 5–6. Shows "Nesten klar – fortsett litt til" banner instead of the full "Klar for neste steg" prompt. (Claude Code session 5)
+
+**Trigger conditions:**
+- `klar`: criteria met + ≥ 40% of program completed + ≥ 2 unique training days
+- `tidligProgresjon`: criteria met on the last 3 unique training days (bypasses 40% gate — allows early progression when exercises click quickly)
+- Both `klar` and `tidligProgresjon` trigger the progression banner/reassessment
+
+**`failsafe`:** akt ≥ 2 AND smerte ≥ 4 in any of the last 3 sessions. Shown as a red warning banner in HjemScreen: "Du registrerte smerte ≥ 4 – kan tyde på at programmet er for krevende → Ta en statussjekk". Smerte is now logged for ALL akt levels (not just Akt 1). In Akt 2+, the label reads "SMERTENIVÅ (registreres for oppfølging)". (Claude Code session 5)
 
 **Why AND-logic, not OR?**
-Clinically, high activation quality alone doesn't mean readiness — a user might have good activation but still report pain. All dimensions must be met simultaneously. Pain at 0 combined with high activation quality is a much stronger signal than either alone. (Session 7)
+Clinically, high activation quality alone doesn't mean readiness — a user might have good activation but still report pain. All dimensions must be met simultaneously. (Session 7)
 
 **Why 40% minimum?**
-Prevents premature triggering after just 2 sessions when the user hasn't had enough exposure to the exercises. But it also allows mid-program progression — users in Akt 1 often don't need the full program duration. (Session 7)
+Prevents premature triggering after just 2 sessions when the user hasn't had enough exposure to the exercises. `tidligProgresjon` bypasses this for users who genuinely progress faster. (Session 7)
 
 ### 3.4 AI Program Generation (`/api/generer-program`)
 
@@ -226,8 +263,12 @@ Displayed as a green "FOR DEG SPESIELT" box in AktivOktScreen and OvelseDetaljSc
 
 **Program parameters by akt:**
 - Akt 1: 3–5 exercises, 2–3 sets, 2–4 weeks
-- Akt 2: 4–6 exercises, 3–4 sets, 3–6 weeks
-- Akt 3: 5–7 exercises, 3–5 sets, 4–8 weeks
+- Akt 2: 3–5 exercises, 2–3 sets, 3–4 weeks
+- Akt 3: 4–6 exercises, 3–4 sets, 4–6 weeks
+- Akt 4: 5–7 exercises, 3–5 sets, 4–8 weeks
+
+**Gatekeeper override by AI:**
+The program generation AI receives `gatekeeper: boolean` on each exercise in the library. It outputs `gatekeeperOverride: true | false | null` per exercise — it can override the library default if a different exercise better reflects the user's primary goal based on their assessment. For example: library marks "Bird dog" as gatekeeper for core, but for this user's hip complaint the "Single-leg squat" is a better indicator — AI sets `gatekeeperOverride: true` on the squat and `false` on bird dog. (Claude Code session 5)
 
 ### 3.5 Exercise Data Structure
 
