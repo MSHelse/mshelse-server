@@ -94,6 +94,7 @@ export default function TrackingScreen({ navigation }: any) {
   useEffect(() => {
     setValgtProgram(filterProgram);
     setValgtOvelse(null);
+    setVisOvelseList(true);
   }, [filterProgram]);
 
   async function hentData() {
@@ -410,35 +411,9 @@ export default function TrackingScreen({ navigation }: any) {
           <Text style={s.seksjonTittel}>FREMGANG</Text>
           <View style={s.grafKort}>
 
-            {/* Nivå 1: Program-chips */}
-            {programNavn.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={s.chipRad}>
-                  {programNavn.map(navn => (
-                    <TouchableOpacity
-                      key={navn}
-                      style={[s.grafChip, valgtProgram === navn && s.grafChipAktiv]}
-                      onPress={() => {
-                        if (valgtProgram === navn) {
-                          // Trykk på samme program – toggle øvelse-liste
-                          setVisOvelseList(v => !v);
-                        } else {
-                          // Bytt program – åpne liste, nullstill øvelse
-                          setValgtProgram(navn);
-                          setValgtOvelse(null);
-                          setVisOvelseList(true);
-                        }
-                      }}
-                    >
-                      <Text style={[s.grafChipTekst, valgtProgram === navn && s.grafChipTekstAktiv]}>
-                        {navn}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            ) : (
-              <Text style={s.tomTekst}>Logg noen økter for å se fremgang per program</Text>
+            {/* Program vises fra toppfilter */}
+            {!valgtProgram && (
+              <Text style={s.tomTekst}>Velg et program øverst for å se fremgang</Text>
             )}
 
             {/* Nivå 2: Øvelse-liste (variant C – lukkes ved valg) */}

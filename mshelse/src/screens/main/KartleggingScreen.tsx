@@ -268,7 +268,7 @@ export default function KartleggingScreen({ navigation }: any) {
         </View>
         <ScrollView contentContainerStyle={s.profilInner}>
           <Text style={s.profilIngress}>
-            Disse opplysningene hjelper AI å tilpasse kartleggingen til deg. Kan endres når som helst under Profil.
+            Disse opplysningene hjelper appen å tilpasse kartleggingen til deg. Kan endres når som helst under Profil.
           </Text>
 
           <View style={s.profilFelt}>

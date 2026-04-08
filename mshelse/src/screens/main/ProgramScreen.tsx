@@ -8,15 +8,17 @@ import { auth, db } from '../../services/firebase';
 import { colors } from '../../theme/colors';
 
 const AKT_BESKRIVELSE: Record<number, { tittel: string; tekst: string }> = {
-  1: { tittel: 'Fase 1 – Få kontroll', tekst: 'Fokus er å forstå hva som skjer og redusere smerte. Øvelsene er skånsomme og målrettede.' },
-  2: { tittel: 'Fase 2 – Rette opp', tekst: 'Smerten er under kontroll. Nå jobber vi med bevegelseskvalitet og kompensasjonsmønstre.' },
-  3: { tittel: 'Fase 3 – Vokse', tekst: 'Du er klar for progressiv belastning. Målet er å bli sterkere enn du var før plagene.' },
+  1: { tittel: 'Akt 1 – Få kontroll', tekst: 'Fokus er å forstå hva som skjer og redusere smerte. Øvelsene er skånsomme og målrettede.' },
+  2: { tittel: 'Akt 2 – Lett stabilitet', tekst: 'Aktivering med støtte – ingen tung belastning. Kompensasjonsmønstre adresseres forsiktig.' },
+  3: { tittel: 'Akt 3 – Tyngre stabilitet', tekst: 'Stabilitet uten hjelp og med lett belastning. Bevegelseskvalitet under kontroll.' },
+  4: { tittel: 'Akt 4 – Bygg styrke', tekst: 'Du er klar for progressiv belastning. Målet er å bli sterkere enn du var før plagene.' },
 };
 
 const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> = {
-  1: { bg: colors.dangerDim, border: 'rgba(192,57,43,0.3)', tekst: colors.danger },
-  2: { bg: colors.yellowDim, border: colors.yellowBorder, tekst: colors.yellow },
-  3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
+  1: { bg: colors.dangerDim,  border: 'rgba(192,57,43,0.3)',   tekst: colors.danger },
+  2: { bg: colors.orangeDim,  border: colors.orangeBorder,     tekst: colors.orange },
+  3: { bg: colors.yellowDim,  border: colors.yellowBorder,     tekst: colors.yellow },
+  4: { bg: colors.greenDim,   border: colors.greenBorder,      tekst: colors.green  },
 };
 
 function formaterDato(ts: any): string {
@@ -87,7 +89,7 @@ export default function ProgramScreen({ navigation }: any) {
         {sisteAssessment && (
           <View style={s.aiBox}>
             <View style={s.aiTopRad}>
-              <Text style={s.aiLabel}>AI-COACH</Text>
+              <Text style={s.aiLabel}>DIN VEIVISER</Text>
               {akt && aktFarge && (
                 <View style={[s.aktBadge, { backgroundColor: aktFarge.bg, borderColor: aktFarge.border }]}>
                   <Text style={[s.aktBadgeTekst, { color: aktFarge.tekst }]}>Akt {akt}</Text>
@@ -123,7 +125,7 @@ export default function ProgramScreen({ navigation }: any) {
                 }
               })}
             >
-              <Text style={s.aiKnappTekst}>Lag program med AI →</Text>
+              <Text style={s.aiKnappTekst}>Lag program →</Text>
             </TouchableOpacity>
           </View>
         )}

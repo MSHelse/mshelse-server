@@ -8,15 +8,17 @@ import AnatomyViewer from '../../components/AnatomyViewer';
 import { colors } from '../../theme/colors';
 
 const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> = {
-  1: { bg: colors.dangerDim, border: 'rgba(192,57,43,0.3)', tekst: colors.danger },
-  2: { bg: colors.yellowDim, border: colors.yellowBorder, tekst: colors.yellow },
-  3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
+  1: { bg: colors.dangerDim,  border: 'rgba(192,57,43,0.3)',   tekst: colors.danger },
+  2: { bg: colors.orangeDim,  border: colors.orangeBorder,     tekst: colors.orange },
+  3: { bg: colors.yellowDim,  border: colors.yellowBorder,     tekst: colors.yellow },
+  4: { bg: colors.greenDim,   border: colors.greenBorder,      tekst: colors.green  },
 };
 
 const AKT_FORKLARING: Record<number, string> = {
   1: 'Kontroll og demping – beregnet for akutt og subakutt fase med smerter. Fokus på deaktivering, mobilisering og lavterskel aktivering.',
-  2: 'Rette opp – aktivering med progresjon. Adresserer kompensasjonsmønstre og bygger opp stabilitet og kontroll.',
-  3: 'Vokse – progressiv styrke og utholdenhet. For brukere uten aktive smerter som ønsker livslang trening.',
+  2: 'Lett stabilitet – aktivering med støtte uten tung belastning. Adresserer kompensasjonsmønstre forsiktig.',
+  3: 'Tyngre stabilitet – uten hjelp og med lett belastning. Bevegelseskvalitet under kontroll.',
+  4: 'Bygg styrke – progressiv styrke og utholdenhet. For brukere uten aktive smerter som ønsker livslang trening.',
 };
 
 const TRACKING_LABEL: Record<string, string> = {

@@ -24,6 +24,14 @@ export const colors = {
   yellowDim:    'rgba(212,168,42,0.12)',
   yellowBorder: 'rgba(212,168,42,0.32)',
 
+  // Oransje (Akt 2)
+  orange:       '#D4732A',
+  orangeDim:    'rgba(212,115,42,0.12)',
+  orangeBorder: 'rgba(212,115,42,0.32)',
+
+  // Blå
+  blue:         '#4A90D9',
+
   // Rød
   danger:       '#C0392B',
   dangerDim:    'rgba(192,57,43,0.12)',

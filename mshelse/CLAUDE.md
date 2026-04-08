@@ -16,6 +16,10 @@ Når en bug rapporteres:
 6. **Ved usikkerhet:** si eksplisitt fra – ikke gjet og ikke prøv tilfeldige fixes.
 7. **Etter 2 mislykkede forsøk:** revurder om problemet er isolert – sjekk parent-komponenter, dataflyt, Firebase/backend, konfig.
 
+**Rotårsaksklassifisering (OBLIGATORISK):** Før fix, klassifiser eksplisitt som én av: `UI` · `State` · `Data` · `API` · `Async` · `Environment`
+
+**Ingen kosmetiske fixes:** IKKE bruk `?.` for å skjule undefined-feil, IKKE legg til default-verdier for å maskere manglende data. Fiks rotårsaken – ikke symptomet.
+
 **Scope:** Les kun filer direkte relatert til problemet. Ikke modifiser flere filer enn rotårsaken krever.
 
 **Output:** Kortfattet. Kun relevante kodeendringer – ikke hele filer med mindre eksplisitt bedt om det.
@@ -30,11 +34,13 @@ Når en bug rapporteres:
 2. **Spør ved tvil.** Hvis opplastet fil ser eldre ut enn fasiten, spør alltid før du handler.
 3. **Oppdater fasiten.** Når sesjon er ferdig og Quang ber om det, oppdater denne filen. Terse – én linje per feature.
 4. **Alert.alert virker ikke i Expo web-build.** Bruk alltid inline state-basert feilmelding.
+4b. **Modal med `visible={false}` blokkerer touches på Expo web.** Wrap alltid Modal i `{tilstand && <Modal visible ...>}` så komponenten er helt ute av DOM når den ikke brukes.
 5. **Alle navigate-kall til AktivOkt og Reassessment må sende `assessment` med.**
 6. **progresjon.ts** ligger i `src/services/progresjon.ts` – importeres av HjemScreen og AktivOktScreen.
 7. **navigation.reset** brukes (ikke navigate) ved navigasjon tilbake til Hjem fra ProgramBuilder og ReassessmentScreen.
 8. **Reassessment-dokumenter** lagres med `type: 'reassessment'` og feltene `tittel`, `triage`, `konklusjon`, `begrunnelse`, `neste_steg`, `program_hint`. Ved `neste_akt` eller `intensiver` settes gammelt program `aktiv: false`.
 9. **index.js er ren JavaScript** – ingen TypeScript-annotasjoner. Kjør `node --check index.js` før push.
+10b. **`tracking_types` på program-øvelse er ikke kilde til sannhet.** AI-generering kan sette feil tracking-typer. AktivOktScreen bruker alltid `gjeldendeData.tracking_types` (live fra Firestore `exercises/`) som primærkilde, med program-øvelse som fallback. Endre tracking-type på øvelsen i admin – ikke på programmet.
 10. **Øvelses-struktur er flat** – ingen `purposes[]`. Feltene `instruksjon`, `tracking_types`, `motstandsType`, `kliniskNotat` ligger direkte på rotnivå i Firestore `exercises`-dokumentet. `formaalLabel` eksisterer i eldre data men brukes ikke lenger i UI.
 13. **`frekvensPerDag` ligger på program, ikke øvelse.** Felt i Firestore `programs/{id}`. `okterTotalt = dager.length × uker × frekvensPerDag`. Backend kan returnere `{ programmer: [...] }` array – ProgramBuilderScreen håndterer begge formater.
 14. **Deploy via `./deploy.sh`** (ikke manuell vercel-kommando). Scriptet kopierer `.vercel/` inn i `dist/` for å sikre riktig Vercel-prosjekt. Uten dette lages et nytt "dist"-prosjekt i stedet for å oppdatere mshelse.
@@ -72,10 +78,11 @@ Appen skal følge brukeren fra dag én med smerte gjennom hele rehabiliteringsre
 **Deploy:** Frontend → Vercel (mshelse.vercel.app) · Backend → Render.com
 
 ### Rehabiliteringsreisen
-- **Akt 1 – Få kontroll:** Deaktivering/mobilisering + lavterskel aktivering. 1–6 uker. Smerte relevant.
-- **Akt 2 – Rette opp:** Aktivering med progresjon, stabilitet, kompensasjonsmønstre.
-- **Akt 3 – Vokse:** Progressiv styrke, utholdenhet, søvn/kosthold/stress. Livslang bruk.
-- **Triage:** 7–10→Akt1 · 4–6→Akt1+2 · 1–3→Akt2 · 0→Akt2/3
+- **Akt 1 – Få kontroll:** Deaktivering/mobilisering + lavterskel aktivering. 2–4 uker. Smerte relevant.
+- **Akt 2 – Lett stabilitet:** Aktivering med støtte, ingen tung belastning. 3–4 uker.
+- **Akt 3 – Tyngre stabilitet:** Uten hjelp, lett belastning, bevegelseskvalitet under kontroll. 4–6 uker.
+- **Akt 4 – Bygg styrke:** Progressiv styrke, utholdenhet, søvn/kosthold/stress. Livslang bruk. 4–8 uker.
+- **Triage:** oppdateres (var: 7–10→Akt1 · 4–6→Akt1+2 · 1–3→Akt2 · 0→Akt2/3)
 
 ---
 
@@ -117,8 +124,7 @@ src/components/AnatomyViewer.tsx
 | **ProfilScreen** | Kollapsbar HELSEPROFIL: kjønn, alder, aktivitet, tilstander, andreTilstander, lagre-knapp kun ved endring. KARTLEGGINGSHISTORIKK: kartlegginger gruppert med statussjekker under (datobasert periode-matching), kartlegging navigerer til KartleggingDetalj, statussjekk ekspanderer inline. Admin-knapp for Quang. |
 | **HjemScreen** | SituasjonKort: akt-badge med ?-chip (modal forklarer alle 3 akter), håndterer vanlig assessment og type:'reassessment' (konklusjon-badge + begrunnelse). Progresjonsbanner med statussjekk-knapp. Dagens økt med **frekvens-badge** ("X av Y ganger i dag") og dynamisk knapp-tekst ("Start gang 2 av 4 →" / "Gjort 4× – start en gang til →"). Aktive programmer. Focus-refresh. |
 | **TrackingScreen** | **Program-filter chip-rad** øverst (Alle + ett per program fra logger, settes automatisk til aktivt program). Alle stats/logg/radar filtreres på valgt program. Ukeoversikt (X/Y for høyfrekvens). Stats (compliance fra okterFullfort/okterTotalt for valgt program). Formål-radar – 2 lag: ved filterProgram=grønn(program)+blå(alle programmer); ved Alle=grønn(siste)+gul(forrige). `RadarDiagram` har `fargeFør`-prop. Fremgang-graf – to-nivå: program-chips (synker med filterProgram) → øvelse-liste (variant C) → datobasert graf, daglig aggregering for høyfrekvens. Logg – **ukegruppert**, for høyfrekvens også **daggruppert** innen uke. Focus-refresh. |
-| **AktivOktScreen** | Video øverst. Hold/tempo fra program ELLER Firestore fallback. Tempo-? popup. Hvile: clearInterval-fix, ±15s, stoppHvile(). Avslutt: modal utenfor ScrollView. Progresjonsbanner → Reassessment. assessment-param sendes videre. lagreOkt(sjekkInnData, fraSkjerm). TRACKING_INFO konstant + ?-chip ved alle tracking-labels. **RIR for sets_reps_weight:** når `rpe`+`sets_reps_weight` i tracking_types → vises som "Reps i reserve (0–4)", konverteres til RPE (10−RIR) ved lagring. Viser `personligKontekst` som grønn "FOR DEG SPESIELT"-boks under instruksjon. AnatomyViewer kompakt alltid synlig med muskelgrupper. **`completed` og andre tracking-typer vises parallelt** (ikke ternary – tidligere bug). Frekvens-strip under progress bar for høyfrekvens-programmer. |
-| **AktivOktScreen** | Video øverst. Hold/tempo fra program ELLER Firestore fallback. Tempo-? popup. Hvile: clearInterval-fix, ±15s, stoppHvile(). Avslutt: modal utenfor ScrollView. Progresjonsbanner → Reassessment. assessment-param sendes videre. lagreOkt(sjekkInnData, fraSkjerm). TRACKING_INFO konstant + ?-chip ved alle tracking-labels. **RIR for sets_reps_weight:** når `rpe`+`sets_reps_weight` i tracking_types → vises som "Reps i reserve (0–4)", konverteres til RPE (10−RIR) ved lagring. Viser `personligKontekst` som grønn "FOR DEG SPESIELT"-boks under instruksjon. AnatomyViewer kompakt alltid synlig med muskelgrupper. **`completed` og andre tracking-typer vises parallelt** (ikke ternary). Frekvens-strip under progress bar for høyfrekvens-programmer. |
+| **AktivOktScreen** | Video øverst. Hold/tempo fra program ELLER Firestore fallback. Tempo-? popup. Hvile: clearInterval-fix, ±15s, stoppHvile(). Avslutt: modal utenfor ScrollView. Progresjonsbanner → Reassessment. assessment-param sendes videre. lagreOkt(sjekkInnData, fraSkjerm). TRACKING_INFO konstant + ?-chip ved alle tracking-labels. **RIR for sets_reps_weight:** når `rpe`+`sets_reps_weight` i tracking_types → vises som "Reps i reserve (0–4)", konverteres til RPE (10−RIR) ved lagring. Viser `personligKontekst` som grønn "FOR DEG SPESIELT"-boks under instruksjon. AnatomyViewer kompakt alltid synlig med muskelgrupper. **`completed` og andre tracking-typer vises parallelt** (ikke ternary). Frekvens-strip under progress bar for høyfrekvens-programmer. **Smertenivå vises for alle akter** (ikke bare akt 1). Progresjonsbanner trigges av `klar` ELLER `tidligProgresjon`. Chat-modal: "Spør om øvelsen →". |
 | **ReassessmentScreen** | Henter logger, bygger trackingOppsummering, sender til /api/reassessment. Lagrer med type:'reassessment' + SituasjonKort-feltene. Deaktiverer gammelt program ved neste_akt/intensiver. navigation.reset ved tilbake til Hjem. Feilskjerm med "Prøv igjen". |
 | **KartleggingDetaljScreen** | Viser full konklusjonsside: kandidater, funn, livsstil, bekreftende, oppsummering, triage for vanlig assessment. Begrunnelse, neste_steg, program_hint for reassessment. |
 | **ProgramBuilderScreen** | Auto-generering ved fraReassessment/fraAssessment. genererHarKjørt-flag. Loading/feilskjerm. navigation.reset til Hjem ved lagring. Leser flat øvelsesstruktur (ingen purposes[]). **FREKVENS PER DAG** chip-rad (1×–5×). Håndterer `data.programmer` array fra AI (lagrer alle programmer direkte). Viser "AI genererte X programmer: …" ved flere programmer. |
@@ -233,10 +239,16 @@ exercises/{id}
 
 ## PROGRESJON-LOGIKK (progresjon.ts)
 
-AND-logikk – ALLE kliniske typer må nå terskel over siste 2–3 logger:
-`activation_quality` ≥ 8 · `mobility` ≥ 8 · `contact_reps` ≥ 85% rep-mål · `rpe` ≤ 7 OG fall ≥ 1.5 · `side_diff` ≤ 3
-`sets_reps`, `sets_reps_weight`, `completed` ignoreres klinisk.
-Akt 1 ekstra: smerte = 0. Trigger: ≥ 40% fullført, ≥ 2 **unike treningsdager** (ikke antall sesjoner – gruppert på `dato.toDateString()` for høyfrekvens-støtte).
+**Gatekeeper-øvelser** avgjør progresjon (felt: `gatekeeper: boolean` på exercise, override: `gatekeeperOverride: boolean|null` på program-øvelse). Fallback: alle øvelser hvis ingen er merkt.
+
+**Akt 1** – kliniske typer fra gatekeeper-øvelser: `activation_quality` ≥ 7, `mobility` ≥ 7, `side_diff` ≤ 3, `contact_reps` ≥ 85% rep-mål. Smerte ≤ 3 (ikke 0). `snartKlar`: smerte ≤ 3 + aktivering 5–6 + mobilitet 5–6.
+**Akt 2–4** – som over men `activation_quality`/`mobility` ≥ 8.
+**RPE** er IKKE et progresjonskrav – kun `rpeSignal` ('for_lett'/'optimal'/'for_hardt') til reassessment-AI.
+`sets_reps`, `sets_reps_weight`, `completed`, `rpe` ignoreres i kliniske kriterier.
+
+**Triggers:** `klar` = kriterier nådd + ≥ 40% fullført + ≥ 2 unike treningsdager. `tidligProgresjon` = kriterier nådd siste 3 unike dager (uten 40%-krav). `failsafe` = akt ≥ 2 + smerte ≥ 4 i siste 3 logger.
+
+**Smerte logges nå for alle akter** (ikke bare akt 1). For akt 2+ vises "SMERTENIVÅ (registreres for oppfølging)".
 
 ---
 

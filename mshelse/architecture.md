@@ -48,6 +48,32 @@ MS Helse is a precision rehabilitation SaaS app built by Quang Hua, a solo muske
 
 ---
 
+## 1b. Source of Truth
+
+Firebase (Firestore) is the single source of truth for all application data.
+
+**Known exception – AI-generated program data:** When a program is generated, exercise fields like `tracking_types` are copied into `programs/{id}/ovelser[]`. This snapshot can become stale if the source exercise is later updated. Always prefer live Firestore data (`exercises/{id}`) over the program snapshot for exercise metadata. AktivOktScreen implements this: it fetches `gjeldendeData` live and uses it as primary source for `tracking_types`, with the program snapshot as fallback only.
+
+The backend API (Render) must NOT redefine or reshape core data structures. It may only:
+- Call external AI (Claude API) and return the result
+- Validate input
+- Trigger side effects (e.g. deactivate old program)
+
+Data is written to and read from Firestore directly by the frontend — the API is not a data layer.
+
+## 1c. Data Flow (Overview)
+
+All data follows this path:
+
+1. **User action** (UI)
+2. **API** (only if AI or server-side logic is needed)
+3. **Firebase** (store or retrieve)
+4. **UI updates** based on Firestore data
+
+Components fetch from Firebase directly (via Firestore SDK). Shared UI state lives in local React state per screen — there is no global state store (no Zustand).
+
+---
+
 ## 2. The Rehabilitation Model (Clinical Core)
 
 The entire app is structured around a three-act rehabilitation journey. This model drives the UI, the AI prompts, the progression logic, and the program generation.

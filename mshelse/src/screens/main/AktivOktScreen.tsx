@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  SafeAreaView, TextInput, Image, Modal
+  SafeAreaView, TextInput, Image, Modal, ActivityIndicator
 } from 'react-native';
 import { collection, addDoc, doc, updateDoc, increment, serverTimestamp, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { auth, db } from '../../services/firebase';
@@ -116,12 +116,20 @@ export default function AktivOktScreen({ navigation, route }: any) {
   const [klarForProgresjon, setKlarForProgresjon] = useState(false);
   const [tidligereLogger, setTidligereLogger] = useState<any[]>([]);
   const [visInfoModal, setVisInfoModal] = useState<string | null>(null); // tracking type key
+  const [visChatModal, setVisChatModal] = useState(false);
+  const [chatSporsmal, setChatSporsmal] = useState('');
+  const [chatSvar, setChatSvar] = useState<string | null>(null);
+  const [chatLaster, setChatLaster] = useState(false);
+  const [chatVenter, setChatVenter] = useState(false);
 
   const gjeldende = ovelser[ovelseIndex];
   const antallSett = gjeldende?.sets || 3;
-  const trackingTypes: string[] = gjeldende?.tracking_types ||
-    (gjeldende?.tracking_type ? [gjeldende.tracking_type] : ['completed']);
   const gjeldendeData = ovelseData[gjeldende?.exerciseId] || null;
+  const trackingTypes: string[] =
+    gjeldendeData?.tracking_types ||
+    (gjeldendeData?.tracking_type ? [gjeldendeData.tracking_type] : null) ||
+    gjeldende?.tracking_types ||
+    (gjeldende?.tracking_type ? [gjeldende.tracking_type] : ['completed']);
 
   useEffect(() => { hentOvelseData(); hentTidligereLogger(); }, []);
   useEffect(() => { setVisDetaljer(false); setRepVerdier({}); }, [ovelseIndex]);
@@ -255,7 +263,7 @@ export default function AktivOktScreen({ navigation, route }: any) {
         programTittel: program?.tittel || 'Økt',
         fullfort: true,
         skippetArsak: null,
-        smerte: program?.akt === 1 || !program?.akt ? smerte : null,
+        smerte,
         notat: notat.trim(),
         ovelser: loggede,
         ...(sjekkInnData ? { sjekkInn: sjekkInnData } : {}),
@@ -274,12 +282,11 @@ export default function AktivOktScreen({ navigation, route }: any) {
           ...tidligereLogger,
         ];
         const vurdering = vurderProgresjon(oppdatertProgram, alleLogger);
-        if (vurdering.klar) {
+        if (vurdering.klar || vurdering.tidligProgresjon) {
           if (fraSkjerm === 'ferdig') {
             setKlarForProgresjon(true);
-            return; // Bli på ferdig-skjermen – banneret vises nå
+            return;
           } else {
-            // Fra midtveis eller sjekk-inn – naviger direkte til Reassessment
             navigation.navigate('Reassessment', { program, forrigeAssessment: assessment });
             return;
           }
@@ -290,6 +297,47 @@ export default function AktivOktScreen({ navigation, route }: any) {
       console.error(e);
     } finally {
       setLagrer(false);
+    }
+  }
+
+  async function spørOmØvelse() {
+    if (!chatSporsmal.trim() || chatLaster) return;
+    setChatLaster(true);
+    setChatSvar(null);
+    setChatVenter(false);
+    const venterTimer = setTimeout(() => setChatVenter(true), 5000);
+    try {
+      const system = [
+        `Du er Quang Hua, manuellterapeut med 11 års klinisk erfaring. En pasient gjør øvelsen "${gjeldende?.navn}" og har stilt deg et spørsmål.`,
+        gjeldendeData?.kliniskNotat
+          ? `\nKlinisk bakgrunnsinformasjon om øvelsen (bruk dette til å resonnere – ikke siter det direkte):\n${gjeldendeData.kliniskNotat}`
+          : '',
+        `\nØvelsens instruksjon: ${gjeldende?.instruksjon || ''}`,
+        gjeldende?.personligKontekst
+          ? `\nKlinisk kontekst for denne pasienten: ${gjeldende.personligKontekst}`
+          : '',
+        `\nProgram-akt: ${program?.akt || 1}`,
+        `\nSvar direkte og presist på norsk. Bruk klinisk kunnskap men skriv som om du snakker med en pasient – ikke akademisk, ikke overforenklet. Ingen unødvendige forbehold.`,
+      ].join('');
+      const res = await fetch('https://mshelse-server.onrender.com/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system,
+          messages: [{ role: 'user', content: chatSporsmal.trim() }],
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 400,
+        }),
+      });
+      if (!res.ok) { setChatSvar('Serveren svarte ikke. Prøv igjen.'); return; }
+      const data = await res.json();
+      setChatSvar(data.content?.[0]?.text || 'Fikk ikke svar. Prøv igjen.');
+    } catch {
+      setChatSvar('Noe gikk galt. Prøv igjen.');
+    } finally {
+      clearTimeout(venterTimer);
+      setChatLaster(false);
+      setChatVenter(false);
     }
   }
 
@@ -613,8 +661,8 @@ export default function AktivOktScreen({ navigation, route }: any) {
             <View style={s.progresjonFerdigBoks}>
               <Text style={s.progresjonFerdigLabel}>KLAR FOR NESTE STEG</Text>
               <Text style={s.progresjonFerdigTekst}>
-                {program?.akt === 1
-                  ? 'Du har vært smertefri en stund og øvelsene sitter godt. På tide å legge på litt mer.'
+                {(program?.akt || 1) === 1
+                  ? 'Smerten er under kontroll og øvelsene sitter godt. På tide å legge på litt mer.'
                   : 'Du holder kontakten gjennom flere reps nå enn da du startet. Musklene begynner å ta over der de skal.'}
               </Text>
               <TouchableOpacity
@@ -629,9 +677,10 @@ export default function AktivOktScreen({ navigation, route }: any) {
             </View>
           )}
 
-          {(program?.akt === 1 || !program?.akt) && (
-            <View style={s.seksjon}>
-              <Text style={s.seksjonTittel}>SMERTENIVÅ ETTER ØKTEN</Text>
+          <View style={s.seksjon}>
+              <Text style={s.seksjonTittel}>
+                {(program?.akt || 1) >= 2 ? 'SMERTENIVÅ (registreres for oppfølging)' : 'SMERTENIVÅ ETTER ØKTEN'}
+              </Text>
               <View style={s.smerterad}>
                 {[0,1,2,3,4,5,6,7,8,9,10].map(n => (
                   <TouchableOpacity
@@ -644,7 +693,6 @@ export default function AktivOktScreen({ navigation, route }: any) {
                 ))}
               </View>
             </View>
-          )}
 
           <View style={s.seksjon}>
             <Text style={s.seksjonTittel}>NOTAT (valgfritt)</Text>
@@ -755,7 +803,8 @@ export default function AktivOktScreen({ navigation, route }: any) {
         </View>
 
         {/* Tempo-forklaring modal */}
-        <Modal visible={visTempoInfo} transparent animationType="fade" onRequestClose={() => setVisTempoInfo(false)}>
+        {visTempoInfo && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setVisTempoInfo(false)}>
           <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setVisTempoInfo(false)}>
             <View style={s.modalKort}>
               <Text style={s.modalTittel}>Hva betyr tempo?</Text>
@@ -788,12 +837,23 @@ export default function AktivOktScreen({ navigation, route }: any) {
             </View>
           </TouchableOpacity>
         </Modal>
+        )}
 
         {/* Instruksjon */}
         {gjeldende?.instruksjon && (
           <View style={s.instruksjonKort}>
             <Text style={s.instruksjonTekst}>{gjeldende.instruksjon}</Text>
           </View>
+        )}
+
+        {/* Spør AI om øvelsen */}
+        {gjeldende?.instruksjon && (
+          <TouchableOpacity
+            style={s.chatChip}
+            onPress={() => { setChatSvar(null); setChatSporsmal(''); setVisChatModal(true); }}
+          >
+            <Text style={s.chatChipTekst}>Spør om øvelsen →</Text>
+          </TouchableOpacity>
         )}
 
         {/* Personlig kontekst – tilpasset brukerens kartlegging */}
@@ -862,11 +922,6 @@ export default function AktivOktScreen({ navigation, route }: any) {
 
         {!hvilerNå && (
           <View style={s.loggSeksjon}>
-            {trackingTypes.includes('completed') && (
-              <View style={s.completedWrapper}>
-                <Text style={s.completedTekst}>Marker settet som fullført</Text>
-              </View>
-            )}
             {trackingTypes.filter(t => t !== 'completed').map(type => {
               const erRIR = type === 'rpe' && trackingTypes.includes('sets_reps_weight');
               const erBegrenset = ['activation_quality', 'mobility', 'side_diff'].includes(type);
@@ -923,29 +978,32 @@ export default function AktivOktScreen({ navigation, route }: any) {
         </View>
       )}
       {/* Info-modal for tracking-typer */}
-      <Modal visible={visInfoModal !== null} transparent animationType="fade" onRequestClose={() => setVisInfoModal(null)}>
-        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setVisInfoModal(null)}>
-          <View style={s.infoModalKort} onStartShouldSetResponder={() => true}>
-            {visInfoModal && TRACKING_INFO[visInfoModal] && (
-              <>
-                <Text style={s.infoModalTittel}>{TRACKING_INFO[visInfoModal].tittel}</Text>
-                <Text style={s.infoModalTekst}>{TRACKING_INFO[visInfoModal].tekst}</Text>
-                {TRACKING_INFO[visInfoModal].eksempel && (
-                  <Text style={s.infoModalEksempel}>{TRACKING_INFO[visInfoModal].eksempel}</Text>
-                )}
-              </>
-            )}
-            <TouchableOpacity style={s.infoModalLukkKnapp} onPress={() => setVisInfoModal(null)}>
-              <Text style={s.infoModalLukkTekst}>Skjønt</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      {visInfoModal !== null && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setVisInfoModal(null)}>
+          <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setVisInfoModal(null)}>
+            <View style={s.infoModalKort} onStartShouldSetResponder={() => true}>
+              {TRACKING_INFO[visInfoModal] && (
+                <>
+                  <Text style={s.infoModalTittel}>{TRACKING_INFO[visInfoModal].tittel}</Text>
+                  <Text style={s.infoModalTekst}>{TRACKING_INFO[visInfoModal].tekst}</Text>
+                  {TRACKING_INFO[visInfoModal].eksempel && (
+                    <Text style={s.infoModalEksempel}>{TRACKING_INFO[visInfoModal].eksempel}</Text>
+                  )}
+                </>
+              )}
+              <TouchableOpacity style={s.infoModalLukkKnapp} onPress={() => setVisInfoModal(null)}>
+                <Text style={s.infoModalLukkTekst}>Skjønt</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
 
       {/* Avslutt-bekreftelse modal */}
-      <Modal visible={visAvsluttModal} transparent animationType="fade" onRequestClose={() => setVisAvsluttModal(false)}>
-        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setVisAvsluttModal(false)}>
-          <View style={s.modalKort} onStartShouldSetResponder={() => true}>
+      {visAvsluttModal && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setVisAvsluttModal(false)}>
+          <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setVisAvsluttModal(false)}>
+            <View style={s.modalKort} onStartShouldSetResponder={() => true}>
             <Text style={s.modalTittel}>Avslutt økt?</Text>
             <Text style={s.modalTekst}>Øvelsene du har logget så langt lagres ikke.</Text>
             <TouchableOpacity style={s.avsluttHoppKnapp} onPress={bekreftHoppOver}>
@@ -960,9 +1018,49 @@ export default function AktivOktScreen({ navigation, route }: any) {
             <TouchableOpacity style={s.modalLukkKnapp} onPress={() => setVisAvsluttModal(false)}>
               <Text style={s.modalLukkTekst}>Fortsett økt</Text>
             </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {visChatModal && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setVisChatModal(false)}>
+          <View style={s.modalOverlay}>
+            <View style={s.modalKort}>
+              <Text style={s.modalTittel}>Spør om {gjeldende?.navn}</Text>
+              <TextInput
+                style={s.chatInput}
+                value={chatSporsmal}
+                onChangeText={setChatSporsmal}
+                placeholder="Hva lurer du på?"
+                placeholderTextColor={colors.muted2}
+                multiline
+              />
+              {chatLaster && (
+                <View style={{ gap: 6 }}>
+                  <ActivityIndicator color={colors.muted} style={{ alignSelf: 'flex-start' }} />
+                  {chatVenter && <Text style={{ fontSize: 12, color: colors.muted2, fontWeight: '300' }}>Starter opp server – kan ta 30–60 sek…</Text>}
+                </View>
+              )}
+              {chatSvar && (
+                <View style={s.chatSvarBoks}>
+                  <Text style={s.chatSvarTekst}>{chatSvar}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[s.btnPrimary, (!chatSporsmal.trim() || chatLaster) && { opacity: 0.4 }]}
+                onPress={spørOmØvelse}
+                disabled={!chatSporsmal.trim() || chatLaster}
+              >
+                <Text style={s.btnPrimaryTekst}>Send</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalLukkKnapp} onPress={() => setVisChatModal(false)}>
+                <Text style={s.modalLukkTekst}>Lukk</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        </Modal>
+      )}
 
     </SafeAreaView>
   );
@@ -981,11 +1079,11 @@ const s = StyleSheet.create({
   inner: { paddingBottom: 120, gap: 0 },
 
   settInfoBoks: { padding: 16, gap: 6 },
-  settInfoTekst: { fontSize: 13, color: colors.muted, fontWeight: '300' },
+  settInfoTekst: { fontSize: 13, color: colors.text, fontWeight: '400' },
   settMetaRad: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   settMetaTekst: { fontSize: 20, color: colors.text, fontWeight: '400' },
-  settMetaChip: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  settMetaChipTekst: { fontSize: 13, color: colors.muted, fontWeight: '400' },
+  settMetaChip: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  settMetaChipTekst: { fontSize: 13, color: colors.text, fontWeight: '400' },
   tempoInfoKnapp: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, alignItems: 'center', justifyContent: 'center' },
   tempoInfoKnappTekst: { fontSize: 11, color: colors.muted2, fontWeight: '500' },
 
@@ -1021,6 +1119,11 @@ const s = StyleSheet.create({
   settChipTekstFullfort: { color: colors.green },
   settChipTekstHoppet: { color: colors.muted2 },
   settChipTekstAktiv: { color: colors.bg, fontWeight: '600' },
+  chatChip: { alignSelf: 'flex-start', marginHorizontal: 16, marginBottom: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border2, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  chatChipTekst: { fontSize: 12, color: colors.text, fontWeight: '400' },
+  chatInput: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border2, borderRadius: 10, padding: 12, fontSize: 14, color: colors.text, minHeight: 60, textAlignVertical: 'top' },
+  chatSvarBoks: { backgroundColor: colors.surface2, borderRadius: 10, padding: 12 },
+  chatSvarTekst: { fontSize: 14, color: colors.text, fontWeight: '300', lineHeight: 22 },
   instruksjonKort: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 14, margin: 16, marginTop: 0 },
   instruksjonTekst: { fontSize: 14, color: colors.text, fontWeight: '400', lineHeight: 23 },
   personligKontekstKort: { backgroundColor: colors.greenDim, borderWidth: 1, borderColor: colors.greenBorder, borderRadius: 14, padding: 14, margin: 16, marginTop: 0, gap: 8 },

@@ -261,7 +261,7 @@ Svar KUN med JSON-array, ingen forklaringer:
         </View>
         <View style={s.genererCenter}>
           <ActivityIndicator color={colors.green} size="large" />
-          <Text style={s.genererTittel}>AI setter sammen program…</Text>
+          <Text style={s.genererTittel}>Setter sammen program…</Text>
           <Text style={s.genererSub}>Velger øvelser og tilpasser til din situasjon</Text>
           {venterPaRender && (
             <Text style={s.genererVenter}>Kobler til server – kan ta 30–60 sek første gang…</Text>
@@ -284,7 +284,7 @@ Svar KUN med JSON-array, ingen forklaringer:
         <View style={s.genererCenter}>
           <Text style={s.genererTittel}>Øvelsesbiblioteket er tomt</Text>
           <Text style={s.genererSub}>
-            Legg til øvelser via admin-panelet i Profil-fanen, så kan AI sette sammen et program.
+            Legg til øvelser via admin-panelet i Profil-fanen, så kan appen sette sammen et program.
           </Text>
           <TouchableOpacity style={s.genererKnapp} onPress={() => navigation.navigate('AdminOvelse')}>
             <Text style={s.genererKnappTekst}>Gå til admin-panel</Text>
@@ -382,7 +382,7 @@ Svar KUN med JSON-array, ingen forklaringer:
 
         {fraReassessment && (
           <View style={s.reassessmentBoks}>
-            <Text style={s.assessmentLabel}>AI-GENERERT PROGRAM</Text>
+            <Text style={s.assessmentLabel}>ANBEFALT PROGRAM</Text>
             <Text style={s.assessmentTittel}>{fraReassessment.program_hint?.fokus || `Akt ${fraReassessment.akt} program`}</Text>
             <Text style={s.assessmentMeta}>
               {fraReassessment.konklusjon === 'neste_akt' ? 'Neste akt' :
@@ -525,7 +525,7 @@ Svar KUN med JSON-array, ingen forklaringer:
 
         {genererteProgrammer.length > 1 ? (
           <View style={[s.oppsummering, { gap: 6 }]}>
-            <Text style={[s.oppsummeringTekst, { color: colors.green, marginBottom: 4 }]}>AI genererte {genererteProgrammer.length} programmer:</Text>
+            <Text style={[s.oppsummeringTekst, { color: colors.green, marginBottom: 4 }]}>Laget {genererteProgrammer.length} programmer:</Text>
             {genererteProgrammer.map((p, i) => (
               <Text key={i} style={s.oppsummeringTekst}>
                 {p.tittel} · {p.dager?.length || 0} dager/uke{(p.frekvensPerDag || 1) > 1 ? ` · ${p.frekvensPerDag}× daglig` : ''}

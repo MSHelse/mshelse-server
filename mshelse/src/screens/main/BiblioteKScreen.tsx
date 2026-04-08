@@ -10,9 +10,10 @@ import { colors } from '../../theme/colors';
 const KROPPSDELER = ['Alle', 'Korsrygg', 'Hofte', 'Nakke', 'Skulder', 'Kne', 'Legg', 'Core'];
 
 const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> = {
-  1: { bg: colors.dangerDim, border: 'rgba(192,57,43,0.3)', tekst: colors.danger },
-  2: { bg: colors.yellowDim, border: colors.yellowBorder, tekst: colors.yellow },
-  3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
+  1: { bg: colors.dangerDim,  border: 'rgba(192,57,43,0.3)',   tekst: colors.danger },
+  2: { bg: colors.orangeDim,  border: colors.orangeBorder,     tekst: colors.orange },
+  3: { bg: colors.yellowDim,  border: colors.yellowBorder,     tekst: colors.yellow },
+  4: { bg: colors.greenDim,   border: colors.greenBorder,      tekst: colors.green  },
 };
 
 export default function BiblioteKScreen({ navigation }: any) {
@@ -108,7 +109,7 @@ export default function BiblioteKScreen({ navigation }: any) {
         >
           <Text style={[s.filterTekst, filterAkt === 0 && s.filterTekstAktiv]}>Alle akter</Text>
         </TouchableOpacity>
-        {[1, 2, 3].map(a => (
+        {[1, 2, 3, 4].map(a => (
           <TouchableOpacity
             key={a}
             style={[s.aktFilterChip, filterAkt === a && { backgroundColor: AKT_FARGE[a].bg, borderColor: AKT_FARGE[a].border }]}

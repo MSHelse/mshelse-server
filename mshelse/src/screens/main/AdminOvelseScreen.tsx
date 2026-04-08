@@ -13,7 +13,7 @@ const ADMIN_UID = 'RpzuHdFg5heYMVHjC6F4IBPSrmq2';
 const BACKEND_URL = 'https://mshelse-server.onrender.com';
 
 const KROPPSDELER = ['Korsrygg', 'Hofte', 'Nakke', 'Skulder', 'Kne', 'Legg', 'Core', 'Ankel', 'Bryst', 'Biceps', 'Triceps', 'Hamstring', 'Quad'];
-const AKT_VALG = [1, 2, 3];
+const AKT_VALG = [1, 2, 3, 4];
 
 const TRACKING_TYPER: { id: string; label: string }[] = [
   { id: 'completed',          label: 'Fullført' },
@@ -112,6 +112,7 @@ export default function AdminOvelseScreen({ navigation }: any) {
   const [trackingTypes,    setTrackingTypes]    = useState<string[]>(['completed']);
   const [motstandsType,    setMotstandsType]    = useState<string[]>([]);
   const [kliniskNotat,     setKliniskNotat]     = useState('');
+  const [gatekeeper,       setGatekeeper]       = useState(false);
   const [generererNotat,   setGenerererNotat]   = useState(false);
 
   // Anatomi
@@ -158,6 +159,7 @@ export default function AdminOvelseScreen({ navigation }: any) {
     setInstruksjon('');
     setTrackingTypes(['completed']); setMotstandsType([]);
     setKliniskNotat('');
+    setGatekeeper(false);
     setAnatomi({ anterior: [], posterior: [] });
     setRedigerer(null);
     setMelding('');
@@ -179,6 +181,7 @@ export default function AdminOvelseScreen({ navigation }: any) {
       setTrackingTypes(o.tracking_types || (o.tracking_type ? [o.tracking_type] : ['completed']));
       setMotstandsType(o.motstandsType || []);
       setKliniskNotat(o.kliniskNotat || '');
+      setGatekeeper(o.gatekeeper || false);
       setAnatomi(o.anatomi || { anterior: [], posterior: [] });
       setVisForm(true);
     } catch (e) {
@@ -198,6 +201,7 @@ export default function AdminOvelseScreen({ navigation }: any) {
     setTrackingTypes(o.tracking_types || (o.tracking_type ? [o.tracking_type] : ['completed']));
     setMotstandsType(o.motstandsType || []);
     setKliniskNotat(o.kliniskNotat || '');
+    setGatekeeper(o.gatekeeper || false);
     setAnatomi(o.anatomi || { anterior: [], posterior: [] });
     setVisForm(true);
   }
@@ -426,6 +430,7 @@ Regler:
       tracking_type:  trackingTypes[0] || 'completed',
       motstandsType:  trackingTypes.includes('sets_reps_weight') ? motstandsType : [],
       kliniskNotat:   kliniskNotat.trim(),
+      gatekeeper:     gatekeeper,
       anatomi:        (anatomi.anterior.length > 0 || anatomi.posterior.length > 0) ? anatomi : null,
     };
     try {
@@ -619,6 +624,21 @@ Regler:
               </View>
             </View>
           )}
+
+          <View style={s.feltGruppe}>
+            <Text style={s.feltLabelLiten}>PROGRESJON-GATEKEEPER</Text>
+            <TouchableOpacity
+              style={[s.gatekeeperKnapp, gatekeeper && s.gatekeeperKnappAktiv]}
+              onPress={() => setGatekeeper(g => !g)}
+            >
+              <Text style={[s.gatekeeperTekst, gatekeeper && s.gatekeeperTekstAktiv]}>
+                {gatekeeper ? '◉ Gatekeeper – avgjør progresjon' : '○ Ikke gatekeeper – supplementerende'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={s.gatekeeperHint}>
+              Gatekeepere er hovedøvelsene som avgjør om brukeren er klar for neste akt. Supplementerende øvelser teller ikke inn i progresjons­kriteriene.
+            </Text>
+          </View>
 
           <View style={s.feltGruppe}>
             <View style={s.aiNotatHeader}>
@@ -846,6 +866,11 @@ const s = StyleSheet.create({
   feltLabel: { fontSize: 11, color: colors.muted, fontWeight: '500', letterSpacing: 1.0 },
   feltLabelLiten: { fontSize: 10, color: colors.muted2, fontWeight: '500', letterSpacing: 0.6 },
   inputHint: { fontSize: 11, color: colors.muted2, fontWeight: '300' },
+  gatekeeperKnapp: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, padding: 11 },
+  gatekeeperKnappAktiv: { backgroundColor: 'rgba(82,168,112,0.12)', borderColor: 'rgba(82,168,112,0.32)' },
+  gatekeeperTekst: { fontSize: 13, color: colors.muted, fontWeight: '400' },
+  gatekeeperTekstAktiv: { color: colors.green, fontWeight: '500' },
+  gatekeeperHint: { fontSize: 11, color: colors.muted2, fontWeight: '300', lineHeight: 16 },
   input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border2, borderRadius: 8, padding: 11, fontSize: 14, color: colors.text },
   inputMultilinje: { minHeight: 80, textAlignVertical: 'top' },
   aiInput: { minHeight: 70, borderColor: colors.greenBorder, backgroundColor: colors.greenDim },

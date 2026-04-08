@@ -13,7 +13,8 @@ export default function HjemScreen({ navigation }: any) {
   const [sisteAssessment, setSisteAssessment] = useState<any>(null);
   const [aktiveProgrammer, setAktiveProgrammer] = useState<any[]>([]);
   const [dagensLogger, setDagensLogger] = useState<any[]>([]);
-  const [progresjonsBanner, setProgresjonsBanner] = useState<{ program: any; akt: number } | null>(null);
+  const [progresjonsBanner, setProgresjonsBanner] = useState<{ program: any; akt: number; snartKlar: boolean; tidligProgresjon: boolean } | null>(null);
+  const [failsafeBanner, setFailsafeBanner] = useState<{ program: any } | null>(null);
 
   const fornavn = auth.currentUser?.displayName?.split(' ')[0] || 'deg';
 
@@ -55,6 +56,7 @@ export default function HjemScreen({ navigation }: any) {
         return dato.toDateString() === iDagStr;
       }));
       setProgresjonsBanner(sjekkProgresjon(aktive, logger));
+      setFailsafeBanner(sjekkFailsafe(aktive, logger));
     } catch (e) {
       console.error(e);
     } finally {
@@ -135,7 +137,7 @@ export default function HjemScreen({ navigation }: any) {
             </TouchableOpacity>
 
             <View style={s.tipsKort}>
-              <Text style={s.tipsTekst}>Tips: Kartleggingen gir AI nok informasjon til å lage et skreddersydd program for deg</Text>
+              <Text style={s.tipsTekst}>Tips: Kartleggingen gir appen nok informasjon til å lage et skreddersydd program for deg</Text>
             </View>
           </View>
         ) : (
@@ -149,6 +151,31 @@ export default function HjemScreen({ navigation }: any) {
               aktivtProgram={aktiveProgrammer[0] || null}
             />
 
+            {/* Failsafe-banner – smerteadvarsel (akt 2+) */}
+            {failsafeBanner && (
+              <TouchableOpacity
+                style={s.failsafeBanner}
+                onPress={() => navigation.navigate('Reassessment', {
+                  program: failsafeBanner.program,
+                  forrigeAssessment: sisteAssessment,
+                })}
+                activeOpacity={0.85}
+              >
+                <View style={s.progresjonsBannerTopp}>
+                  <View style={[s.progresjonsBannerIkon, { backgroundColor: colors.dangerDim, borderColor: 'rgba(192,57,43,0.3)' }]}>
+                    <Text style={[s.progresjonsBannerIkonTekst, { color: colors.danger }]}>!</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.progresjonsBannerLabel, { color: colors.danger }]}>SMERTE REGISTRERT</Text>
+                    <Text style={s.progresjonsBannerTekst}>Du registrerte smerte ≥ 4 i en nylig økt. Det kan tyde på at programmet er for krevende.</Text>
+                  </View>
+                </View>
+                <View style={[s.progresjonsBannerKnapp, { borderTopColor: 'rgba(192,57,43,0.2)' }]}>
+                  <Text style={[s.progresjonsBannerKnappTekst, { color: colors.danger }]}>Ta en statussjekk →</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
             {/* Progresjonsbanner */}
             {progresjonsBanner && (
               <TouchableOpacity
@@ -161,20 +188,27 @@ export default function HjemScreen({ navigation }: any) {
               >
                 <View style={s.progresjonsBannerTopp}>
                   <View style={s.progresjonsBannerIkon}>
-                    <Text style={s.progresjonsBannerIkonTekst}>↑</Text>
+                    <Text style={s.progresjonsBannerIkonTekst}>{progresjonsBanner.snartKlar ? '~' : '↑'}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.progresjonsBannerLabel}>KLAR FOR NESTE STEG</Text>
+                    <Text style={s.progresjonsBannerLabel}>
+                      {progresjonsBanner.snartKlar
+                        ? 'NESTEN KLAR – FORTSETT LITT TIL'
+                        : 'KLAR FOR NESTE STEG'}
+                    </Text>
                     <Text style={s.progresjonsBannerTekst}>
-                      {progresjonsBanner.akt === 1
-                        ? 'Du har vært smertefri en stund og øvelsene sitter godt. På tide å legge på litt mer.'
-                        : 'Du holder kontakten gjennom flere reps nå enn da du startet. Musklene begynner å ta over der de skal.'
-                      }
+                      {progresjonsBanner.snartKlar
+                        ? 'Du er på rett vei – smerten er lav og øvelsene begynner å sitte. Fortsett litt til før du går videre.'
+                        : progresjonsBanner.akt === 1
+                          ? 'Smerten er under kontroll og øvelsene sitter godt. På tide å legge på litt mer.'
+                          : 'Du holder kontakten gjennom flere reps nå enn da du startet. Musklene begynner å ta over der de skal.'}
                     </Text>
                   </View>
                 </View>
                 <View style={s.progresjonsBannerKnapp}>
-                  <Text style={s.progresjonsBannerKnappTekst}>Ta en kort statussjekk →</Text>
+                  <Text style={s.progresjonsBannerKnappTekst}>
+                    {progresjonsBanner.snartKlar ? 'Se status →' : 'Ta en kort statussjekk →'}
+                  </Text>
                 </View>
               </TouchableOpacity>
             )}
@@ -322,11 +356,23 @@ export default function HjemScreen({ navigation }: any) {
   );
 }
 
-function sjekkProgresjon(programmer: any[], logger: any[]): { program: any; akt: number } | null {
+function sjekkProgresjon(programmer: any[], logger: any[]): { program: any; akt: number; snartKlar: boolean; tidligProgresjon: boolean } | null {
   for (const p of programmer) {
     const programLogger = logger.filter((l: any) => l.programId === p.id);
-    const resultat = vurderProgresjon(p, programLogger);
-    if (resultat.klar) return { program: p, akt: resultat.akt };
+    const r = vurderProgresjon(p, programLogger);
+    if (r.klar || r.tidligProgresjon || r.snartKlar) {
+      return { program: p, akt: r.akt, snartKlar: r.snartKlar && !r.klar && !r.tidligProgresjon, tidligProgresjon: r.tidligProgresjon && !r.klar };
+    }
+  }
+  return null;
+}
+
+function sjekkFailsafe(programmer: any[], logger: any[]): { program: any } | null {
+  for (const p of programmer) {
+    if ((p.akt || 1) < 2) continue;
+    const programLogger = logger.filter((l: any) => l.programId === p.id);
+    const r = vurderProgresjon(p, programLogger);
+    if (r.failsafe) return { program: p };
   }
   return null;
 }
@@ -348,15 +394,17 @@ function nesteOktDag(program: any): string {
 }
 
 const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> = {
-  1: { bg: colors.dangerDim, border: 'rgba(192,57,43,0.3)', tekst: colors.danger },
-  2: { bg: colors.yellowDim, border: colors.yellowBorder, tekst: colors.yellow },
-  3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
+  1: { bg: colors.dangerDim,   border: 'rgba(192,57,43,0.3)',   tekst: colors.danger },
+  2: { bg: colors.orangeDim,   border: colors.orangeBorder,     tekst: colors.orange },
+  3: { bg: colors.yellowDim,   border: colors.yellowBorder,     tekst: colors.yellow },
+  4: { bg: colors.greenDim,    border: colors.greenBorder,      tekst: colors.green },
 };
 
 const AKT_LABEL: Record<number, string> = {
   1: 'Få kontroll',
-  2: 'Rette opp',
-  3: 'Vokse',
+  2: 'Lett stabilitet',
+  3: 'Tyngre stabilitet',
+  4: 'Bygg styrke',
 };
 
 function SituasjonKort({ assessment, navigation, aktivtProgram }: { assessment: any; navigation: any; aktivtProgram: any }) {
@@ -378,9 +426,10 @@ function SituasjonKort({ assessment, navigation, aktivtProgram }: { assessment: 
   const konklusjonInfo = erReassessment ? KONKLUSJON_LABEL[assessment.konklusjon] : null;
 
   const AKT_INFO = [
-    { akt: 1, tittel: 'Akt 1 – Få kontroll', tekst: 'Her starter du. Fokus er å deaktivere overaktive muskler og lære kroppen å bruke de riktige igjen. Øvelsene er lette – det handler om kontakt, ikke styrke. Smerte er ofte relevant i denne fasen.' },
-    { akt: 2, tittel: 'Akt 2 – Rette opp', tekst: 'Du har fått kontakt. Nå bygger vi kapasitet og korrigerer kompensasjonsmønstre. Øvelsene krever mer – stabilitet under belastning og bevegelseskvalitet er i fokus.' },
-    { akt: 3, tittel: 'Akt 3 – Vokse', tekst: 'Grunnmuren er på plass. Nå handler det om å bygge videre – progressiv styrke, utholdenhet og å gjøre kroppen robust nok til å tåle det livet krever.' },
+    { akt: 1, tittel: 'Akt 1 – Få kontroll', tekst: 'Her starter du. Fokus er å deaktivere overaktive muskler og lære kroppen å bruke de riktige igjen. Øvelsene er lette – det handler om kontakt, ikke styrke. Smerte er relevant i denne fasen.' },
+    { akt: 2, tittel: 'Akt 2 – Lett stabilitet', tekst: 'Du har fått kontakt. Nå trener vi stabilitet med støtte – lette øvelser som krever kontroll uten tung belastning. Kompensasjonsmønstre adresseres.' },
+    { akt: 3, tittel: 'Akt 3 – Tyngre stabilitet', tekst: 'Stabilitet uten hjelp og med lett belastning. Fokus på bevegelseskvalitet under kontroll – kroppen skal lære å holde riktig stilling når det koster litt.' },
+    { akt: 4, tittel: 'Akt 4 – Bygg styrke', tekst: 'Grunnmuren er på plass. Nå handler det om progressiv styrke, utholdenhet og å gjøre kroppen robust nok til å tåle det livet krever.' },
   ];
 
   return (
@@ -468,11 +517,11 @@ function SituasjonKort({ assessment, navigation, aktivtProgram }: { assessment: 
             {AKT_INFO.map(info => (
               <View key={info.akt} style={[s.aktInfoRad, info.akt === akt && s.aktInfoRadAktiv]}>
                 <View style={[s.aktInfoNummer, {
-                  backgroundColor: info.akt === 1 ? AKT_FARGE[1].bg : info.akt === 2 ? AKT_FARGE[2].bg : AKT_FARGE[3].bg,
-                  borderColor: info.akt === 1 ? AKT_FARGE[1].border : info.akt === 2 ? AKT_FARGE[2].border : AKT_FARGE[3].border,
+                  backgroundColor: (AKT_FARGE[info.akt] || AKT_FARGE[1]).bg,
+                  borderColor: (AKT_FARGE[info.akt] || AKT_FARGE[1]).border,
                 }]}>
                   <Text style={[s.aktInfoNummerTekst, {
-                    color: info.akt === 1 ? AKT_FARGE[1].tekst : info.akt === 2 ? AKT_FARGE[2].tekst : AKT_FARGE[3].tekst,
+                    color: (AKT_FARGE[info.akt] || AKT_FARGE[1]).tekst,
                   }]}>{info.akt}</Text>
                 </View>
                 <View style={{ flex: 1, gap: 3 }}>
@@ -600,6 +649,7 @@ const s = StyleSheet.create({
 
   // Progresjonsbanner
   progresjonsBanner: { backgroundColor: colors.greenDim, borderWidth: 1.5, borderColor: colors.green, borderRadius: 14, padding: 16, gap: 14 },
+  failsafeBanner: { backgroundColor: colors.dangerDim, borderWidth: 1.5, borderColor: 'rgba(192,57,43,0.5)', borderRadius: 14, padding: 16, gap: 14 },
   progresjonsBannerTopp: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   progresjonsBannerIkon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   progresjonsBannerIkonTekst: { fontSize: 16, color: '#fff', fontWeight: '600' },

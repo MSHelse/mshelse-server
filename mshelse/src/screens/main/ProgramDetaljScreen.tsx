@@ -26,9 +26,10 @@ const DAGER_FULL: Record<string, string> = {
 };
 
 const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> = {
-  1: { bg: colors.dangerDim, border: 'rgba(192,57,43,0.3)', tekst: colors.danger },
-  2: { bg: colors.yellowDim, border: colors.yellowBorder, tekst: colors.yellow },
-  3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
+  1: { bg: colors.dangerDim,  border: 'rgba(192,57,43,0.3)',   tekst: colors.danger },
+  2: { bg: colors.orangeDim,  border: colors.orangeBorder,     tekst: colors.orange },
+  3: { bg: colors.yellowDim,  border: colors.yellowBorder,     tekst: colors.yellow },
+  4: { bg: colors.greenDim,   border: colors.greenBorder,      tekst: colors.green  },
 };
 
 export default function ProgramDetaljScreen({ navigation, route }: any) {

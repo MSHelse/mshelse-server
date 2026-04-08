@@ -12,9 +12,11 @@ export default function RegistreringScreen({ navigation }: any) {
   const [bekreft, setBekreft] = useState('');
   const [laster, setLaster] = useState(false);
   const [feil, setFeil] = useState('');
+  const [samtykke, setSamtykke] = useState(false);
 
   async function registrer() {
     if (!navn || !epost || !passord || !bekreft) { setFeil('Fyll inn alle feltene'); return; }
+    if (!samtykke) { setFeil('Du må samtykke til datalagring for å fortsette'); return; }
     if (passord !== bekreft) { setFeil('Passordene er ikke like'); return; }
     if (passord.length < 8) { setFeil('Passordet må være minst 8 tegn'); return; }
     setLaster(true);
@@ -58,6 +60,14 @@ export default function RegistreringScreen({ navigation }: any) {
             <Text style={s.label}>BEKREFT PASSORD</Text>
             <TextInput style={s.input} value={bekreft} onChangeText={setBekreft} placeholder="••••••••" placeholderTextColor={colors.muted2} secureTextEntry />
           </View>
+          <TouchableOpacity style={s.samtykkeRad} onPress={() => setSamtykke(v => !v)} activeOpacity={0.7}>
+            <View style={[s.samtykkeBoks, samtykke && s.samtykkeBoksAktiv]}>
+              {samtykke && <Text style={s.samtykkehake}>✓</Text>}
+            </View>
+            <Text style={s.samtykkeTekst}>
+              Jeg samtykker til at Muskelspesialist Klinikken lagrer mine treningsøkter og øvelsesdata for å gi meg personlig oppfølging.
+            </Text>
+          </TouchableOpacity>
           {feil ? <Text style={s.feil}>{feil}</Text> : null}
           <TouchableOpacity style={s.btnPrimary} onPress={registrer} disabled={laster}>
             {laster ? <ActivityIndicator color={colors.bg} /> : <Text style={s.btnPrimaryText}>Opprett konto</Text>}
@@ -86,4 +96,9 @@ const s = StyleSheet.create({
   btnPrimaryText: { color: colors.bg, fontSize: 15, fontWeight: '600' },
   loggInn: { fontSize: 13, color: colors.muted, textAlign: 'center', fontWeight: '400' },
   loggInnLink: { color: colors.accent },
+  samtykkeRad: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 4 },
+  samtykkeBoks: { width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: colors.border2, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
+  samtykkeBoksAktiv: { backgroundColor: colors.green, borderColor: colors.green },
+  samtykkehake: { fontSize: 12, color: colors.bg, fontWeight: '600' },
+  samtykkeTekst: { flex: 1, fontSize: 13, color: colors.muted, fontWeight: '300', lineHeight: 20 },
 });

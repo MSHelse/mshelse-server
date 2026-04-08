@@ -5,15 +5,17 @@ import {
 import { colors } from '../../theme/colors';
 
 const AKT_FARGE: Record<number, { bg: string; border: string; tekst: string }> = {
-  1: { bg: colors.dangerDim, border: 'rgba(192,57,43,0.3)', tekst: colors.danger },
-  2: { bg: colors.yellowDim, border: colors.yellowBorder, tekst: colors.yellow },
-  3: { bg: colors.greenDim, border: colors.greenBorder, tekst: colors.green },
+  1: { bg: colors.dangerDim,  border: 'rgba(192,57,43,0.3)',   tekst: colors.danger },
+  2: { bg: colors.orangeDim,  border: colors.orangeBorder,     tekst: colors.orange },
+  3: { bg: colors.yellowDim,  border: colors.yellowBorder,     tekst: colors.yellow },
+  4: { bg: colors.greenDim,   border: colors.greenBorder,      tekst: colors.green  },
 };
 
 const AKT_LABEL: Record<number, string> = {
   1: 'Få kontroll',
-  2: 'Rette opp',
-  3: 'Vokse',
+  2: 'Lett stabilitet',
+  3: 'Tyngre stabilitet',
+  4: 'Bygg styrke',
 };
 
 const KONKLUSJON_LABEL: Record<string, string> = {

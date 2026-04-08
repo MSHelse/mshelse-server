@@ -283,13 +283,22 @@ REGLER:
 - Match øvelser til akt og klinisk fokus
 - Velg riktig formål (purpose) per øvelse basert på klinisk kontekst
 - Akt 1: deaktivering/mobilisering + lavterskel aktivering, 2-4 uker
-- Akt 2: aktivering med progresjon, stabilitet, 3-6 uker
-- Akt 3: progressiv styrke og utholdenhet, 4-8 uker
-- Antall øvelser: Akt 1: 3-5, Akt 2: 4-6, Akt 3: 5-7
-- Sett: Akt 1: 2-3, Akt 2: 3-4, Akt 3: 3-5
+- Akt 2: lett stabilitet – aktivering med støtte, ingen tung belastning, 3-4 uker
+- Akt 3: tyngre stabilitet – uten hjelp, lett belastning, bevegelseskvalitet under kontroll, 4-6 uker
+- Akt 4: progressiv styrke og utholdenhet, 4-8 uker
+- Antall øvelser: Akt 1: 3-5, Akt 2: 3-5, Akt 3: 4-6, Akt 4: 5-7
+- Sett: Akt 1: 2-3, Akt 2: 2-3, Akt 3: 3-4, Akt 4: 3-5
 - Reps: tilpass til tracking-type og akt
 - Treningsdager: 2-4 per uke avhengig av akt
 - Bruk norsk bokmål
+
+GATEKEEPER-ØVELSER:
+Noen øvelser er merket gatekeeper: true i biblioteket – disse er klinisk valgt som nøkkelindikator for progresjon (f.eks. goblet squat for korsrygg).
+- Bruk gatekeeper: true fra biblioteket som utgangspunkt
+- Du kan sette gatekeeperOverride: false på en øvelse hvis en annen i programmet er bedre egnet som måleøvelse
+- Du kan sette gatekeeperOverride: true for å markere en øvelse som gatekeeper selv om den ikke er merkt i biblioteket
+- Sett gatekeeperOverride: null for å følge bibliotekets standard
+- Hvert program bør ha 1-2 gatekeeper-øvelser (de viktigste for brukerens mål)
 
 PERSONLIG KONTEKST PER ØVELSE:
 For hver øvelse skal du skrive en kort personlig kontekst (1-3 setninger) som forklarer:
@@ -326,7 +335,9 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
           "sets": 3,
           "reps": 10,
           "hold": null,
-          "tempo": null
+          "tempo": null,
+          "gatekeeper": true,
+          "gatekeeperOverride": null
         }
       ]
     }
@@ -340,6 +351,7 @@ RESPONSFORMAT – kun gyldig JSON, ingen forklaringer:
       act: o.act || [],
       tracking_types: o.tracking_types || (o.tracking_type ? [o.tracking_type] : ['completed']),
       kliniskNotat: o.kliniskNotat || '',
+      gatekeeper: o.gatekeeper || false,
     }));
 
     // Bygg kontekst avhengig av om det er første kartlegging eller reassessment
