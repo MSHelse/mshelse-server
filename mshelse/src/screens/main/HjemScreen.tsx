@@ -15,6 +15,8 @@ export default function HjemScreen({ navigation }: any) {
   const [dagensLogger, setDagensLogger] = useState<any[]>([]);
   const [progresjonsBanner, setProgresjonsBanner] = useState<{ program: any; akt: number; snartKlar: boolean; tidligProgresjon: boolean } | null>(null);
   const [failsafeBanner, setFailsafeBanner] = useState<{ program: any } | null>(null);
+  const [regresjonBanner, setRegresjonBanner] = useState<{ program: any; arsak: 'smertespike' | 'kontroll' } | null>(null);
+  const [stagnasjonBanner, setStagnasjonBanner] = useState<{ program: any; justering: 'øk' | 'reduser' | null; strength: 'low' | 'medium' | 'high' } | null>(null);
 
   const fornavn = auth.currentUser?.displayName?.split(' ')[0] || 'deg';
 
@@ -57,6 +59,10 @@ export default function HjemScreen({ navigation }: any) {
       }));
       setProgresjonsBanner(sjekkProgresjon(aktive, logger));
       setFailsafeBanner(sjekkFailsafe(aktive, logger));
+      const reg = sjekkRegresjon(aktive, logger);
+      setRegresjonBanner(reg);
+      if (reg) setStagnasjonBanner(null);
+      else setStagnasjonBanner(sjekkStagnasjon(aktive, logger));
     } catch (e) {
       console.error(e);
     } finally {
@@ -151,8 +157,44 @@ export default function HjemScreen({ navigation }: any) {
               aktivtProgram={aktiveProgrammer[0] || null}
             />
 
+            {/* Bannere – låst prioritetsrekkefølge: regresjon → failsafe → stagnasjon → progresjon */}
+
+            {/* Regresjonsbanner */}
+            {regresjonBanner && (
+              <View style={s.regresjonBanner}>
+                <View style={s.progresjonsBannerTopp}>
+                  <View style={[s.progresjonsBannerIkon, { backgroundColor: 'rgba(192,57,43,0.2)', borderColor: 'rgba(192,57,43,0.4)' }]}>
+                    <Text style={[s.progresjonsBannerIkonTekst, { color: colors.danger }]}>↓</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.progresjonsBannerLabel, { color: colors.danger }]}>TRENGER LITT MER TID</Text>
+                    <Text style={s.progresjonsBannerTekst}>
+                      {regresjonBanner.arsak === 'smertespike'
+                        ? 'Du opplevde mer smerte i siste økt. Vi tar det litt roligere en stund.'
+                        : 'Kontrollen i øvelsene har falt. Vi bygger litt mer grunnlag før vi fortsetter.'}
+                    </Text>
+                  </View>
+                </View>
+                {regresjonBanner.arsak === 'smertespike' ? (
+                  <TouchableOpacity
+                    style={[s.progresjonsBannerKnapp, { borderTopColor: 'rgba(192,57,43,0.2)' }]}
+                    onPress={() => navigation.navigate('Reassessment', {
+                      program: regresjonBanner.program,
+                      forrigeAssessment: sisteAssessment,
+                    })}
+                  >
+                    <Text style={[s.progresjonsBannerKnappTekst, { color: colors.danger }]}>Ta en statussjekk →</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[s.progresjonsBannerKnapp, { borderTopColor: 'rgba(192,57,43,0.2)' }]}>
+                    <Text style={[s.progresjonsBannerKnappTekst, { color: colors.muted }]}>Fortsett på dette nivået</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
             {/* Failsafe-banner – smerteadvarsel (akt 2+) */}
-            {failsafeBanner && (
+            {!regresjonBanner && failsafeBanner && (
               <TouchableOpacity
                 style={s.failsafeBanner}
                 onPress={() => navigation.navigate('Reassessment', {
@@ -172,6 +214,40 @@ export default function HjemScreen({ navigation }: any) {
                 </View>
                 <View style={[s.progresjonsBannerKnapp, { borderTopColor: 'rgba(192,57,43,0.2)' }]}>
                   <Text style={[s.progresjonsBannerKnappTekst, { color: colors.danger }]}>Ta en statussjekk →</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Stagnasjonsbanner */}
+            {!regresjonBanner && !failsafeBanner && stagnasjonBanner && (
+              <TouchableOpacity
+                style={s.stagnasjonBanner}
+                onPress={() => navigation.navigate('Reassessment', {
+                  program: stagnasjonBanner.program,
+                  forrigeAssessment: sisteAssessment,
+                  stagnasjon: true,
+                  stagnasjonJustering: stagnasjonBanner.justering,
+                  stagnasjonStrength: stagnasjonBanner.strength,
+                })}
+                activeOpacity={0.85}
+              >
+                <View style={s.progresjonsBannerTopp}>
+                  <View style={[s.progresjonsBannerIkon, { backgroundColor: colors.yellowDim, borderColor: colors.yellowBorder }]}>
+                    <Text style={[s.progresjonsBannerIkonTekst, { color: colors.yellow }]}>→</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.progresjonsBannerLabel, { color: colors.yellow }]}>FREMGANGEN HAR STOPPET OPP</Text>
+                    <Text style={s.progresjonsBannerTekst}>
+                      {stagnasjonBanner.justering === 'øk'
+                        ? 'Du gjør det bra, men kroppen trenger mer utfordring for å fortsette å utvikle seg.'
+                        : stagnasjonBanner.justering === 'reduser'
+                          ? 'Belastningen er litt høy. Vi justerer for å finne riktig nivå igjen.'
+                          : 'Vi justerer programmet litt for å hjelpe deg videre.'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[s.progresjonsBannerKnapp, { borderTopColor: colors.yellowBorder }]}>
+                  <Text style={[s.progresjonsBannerKnappTekst, { color: colors.yellow }]}>Juster programmet →</Text>
                 </View>
               </TouchableOpacity>
             )}
@@ -373,6 +449,26 @@ function sjekkFailsafe(programmer: any[], logger: any[]): { program: any } | nul
     const programLogger = logger.filter((l: any) => l.programId === p.id);
     const r = vurderProgresjon(p, programLogger);
     if (r.failsafe) return { program: p };
+  }
+  return null;
+}
+
+function sjekkRegresjon(programmer: any[], logger: any[]): { program: any; arsak: 'smertespike' | 'kontroll' } | null {
+  for (const p of programmer) {
+    const programLogger = logger.filter((l: any) => l.programId === p.id);
+    const r = vurderProgresjon(p, programLogger);
+    if (r.regresjon && r.regresjonArsak) return { program: p, arsak: r.regresjonArsak };
+  }
+  return null;
+}
+
+function sjekkStagnasjon(programmer: any[], logger: any[]): { program: any; justering: 'øk' | 'reduser' | null; strength: 'low' | 'medium' | 'high' } | null {
+  for (const p of programmer) {
+    const programLogger = logger.filter((l: any) => l.programId === p.id);
+    const r = vurderProgresjon(p, programLogger);
+    if (r.stagnasjon && r.stagnasjonStrength) {
+      return { program: p, justering: r.stagnasjonJustering, strength: r.stagnasjonStrength };
+    }
   }
   return null;
 }
@@ -650,6 +746,8 @@ const s = StyleSheet.create({
   // Progresjonsbanner
   progresjonsBanner: { backgroundColor: colors.greenDim, borderWidth: 1.5, borderColor: colors.green, borderRadius: 14, padding: 16, gap: 14 },
   failsafeBanner: { backgroundColor: colors.dangerDim, borderWidth: 1.5, borderColor: 'rgba(192,57,43,0.5)', borderRadius: 14, padding: 16, gap: 14 },
+  regresjonBanner: { backgroundColor: 'rgba(192,57,43,0.15)', borderWidth: 2, borderColor: 'rgba(192,57,43,0.5)', borderRadius: 14, padding: 16, gap: 14 },
+  stagnasjonBanner: { backgroundColor: colors.yellowDim, borderWidth: 1.5, borderColor: colors.yellowBorder, borderRadius: 14, padding: 16, gap: 14 },
   progresjonsBannerTopp: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   progresjonsBannerIkon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   progresjonsBannerIkonTekst: { fontSize: 16, color: '#fff', fontWeight: '600' },

@@ -211,9 +211,26 @@ app.post('/api/proxy', async (req, res) => {
 
 app.post('/api/reassessment', async (req, res) => {
   try {
-    const { messages, trackingData, forrigeAssessment } = req.body;
+    const { messages, trackingData, forrigeAssessment, stagnasjon, stagnasjonJustering, stagnasjonStrength } = req.body;
 
-    const REASSESSMENT_SYSTEM = `Du er en klinisk oppfølger for MS Helse-appen. Du har 30 års erfaring som fysioterapeut og manuellterapeut.
+    const stagnasjonAvsnitt = stagnasjon ? `
+
+STAGNASJON DETEKTERT (styrke: ${stagnasjonStrength || 'ukjent'}):
+Retning: ${stagnasjonJustering === 'øk' ? 'øk stimulus' : stagnasjonJustering === 'reduser' ? 'reduser belastning' : 'ukjent'}
+
+Stagnasjon betyr STIMULUS MISMATCH – ikke bare volum-feil.
+
+Ved 'øk' (underload):
+- Prioriter økt bevegelseskompleksitet: reduser støtte, mer fri bevegelse, større ROM
+- IKKE bare øk antall repetisjoner
+
+Ved 'reduser' (overload):
+- Forenkle bevegelsen eller øk støtte
+- Reduser koordinasjonskrav FØR du reduserer volum
+
+Styrke 'high' → sterk justering, 'medium' → moderat, 'low' → mild hint.` : '';
+
+    const REASSESSMENT_SYSTEM = `Du er en klinisk oppfølger for MS Helse-appen. Du har 30 års erfaring som fysioterapeut og manuellterapeut.${stagnasjonAvsnitt}
 
 KONTEKST DU HAR TILGJENGELIG:
 Du har fått forrige assessment og tracking-data fra programmet. Bruk dette aktivt – du trenger ikke kartlegge det som allerede er kjent. Du kartlegger kun det som har endret seg.

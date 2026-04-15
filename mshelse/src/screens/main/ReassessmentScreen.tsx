@@ -10,7 +10,7 @@ import { colors } from '../../theme/colors';
 const BACKEND = 'https://mshelse-server.onrender.com';
 
 export default function ReassessmentScreen({ navigation, route }: any) {
-  const { program, forrigeAssessment } = route?.params || {};
+  const { program, forrigeAssessment, stagnasjon, stagnasjonJustering, stagnasjonStrength } = route?.params || {};
 
   const [sporsmal, setSporsmal] = useState('');
   const [sublabel, setSublabel] = useState('');
@@ -137,6 +137,9 @@ export default function ReassessmentScreen({ navigation, route }: any) {
       messages: msgs,
       forrigeAssessment,
       trackingData: data || trackingData,
+      stagnasjon: stagnasjon || false,
+      stagnasjonJustering: stagnasjonJustering || null,
+      stagnasjonStrength: stagnasjonStrength || null,
     };
     const res = await fetch(`${BACKEND}/api/reassessment`, {
       method: 'POST',

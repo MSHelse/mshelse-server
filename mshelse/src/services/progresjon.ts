@@ -8,6 +8,17 @@ export interface ProgresjonResultat {
   failsafe: boolean;          // Akt 2+: smerte ≥ 4 registrert nylig
   akt: number;
   årsak: string;
+  // Regresjon og stagnasjon
+  regresjon: boolean;
+  regresjonArsak: 'smertespike' | 'kontroll' | null;
+  stagnasjon: boolean;
+  stagnasjonJustering: 'øk' | 'reduser' | null;
+  stagnasjonStrength: 'low' | 'medium' | 'high' | null;
+  stagnasjonData: {
+    contact_reps: 'flat' | 'improving' | 'not_tracked';
+    side_diff:    'flat' | 'improving' | 'not_tracked';
+    rpe:          number | null;
+  } | null;
 }
 
 // Terskelverdier per akt
@@ -33,6 +44,102 @@ const TERSKEL_AKT2PLUSS: Record<string, { type: 'min' | 'maks'; verdi: number }>
 
 // RPE er et justeringssignal – ikke et progresjonskrav
 const IGNORER = new Set(['sets_reps', 'sets_reps_weight', 'completed', 'rpe']);
+
+function regresjonSjekk(
+  sisteUnike: any[][],
+  gkIds: Set<string>,
+  program: any,
+): { regresjon: boolean; arsak: 'smertespike' | 'kontroll' | null } {
+  // A) Smertespike: noen av siste 3 økter har smerte ≥ 5
+  const siste3 = sisteUnike.slice(0, 3).flat();
+  if (siste3.some((l: any) => (l.smerte ?? 0) >= 5)) {
+    return { regresjon: true, arsak: 'smertespike' };
+  }
+
+  // B) Kontrollkollaps: ≥ 2 gatekeeper-logger siste 2 dager med contact_reps < 50% repMal
+  const gkOvelse = (program.ovelser || []).find((o: any) =>
+    gkIds.has(o.exerciseId ?? o.id) &&
+    (o.tracking_types || [o.tracking_type]).includes?.('contact_reps')
+  );
+  const repMal = gkOvelse?.reps ?? null;
+
+  if (repMal !== null) {
+    const gkSiste2 = filterGatekeeperLogger(sisteUnike.slice(0, 2).flat(), gkIds);
+    const lavKontrollCount = gkSiste2.filter(
+      (l: any) => l.contact_reps !== null && l.contact_reps < repMal * 0.5
+    ).length;
+    if (lavKontrollCount >= 2) {
+      return { regresjon: true, arsak: 'kontroll' };
+    }
+  }
+
+  return { regresjon: false, arsak: null };
+}
+
+function stagnasjonSjekk(
+  sisteUnike5: any[][],
+  gkIds: Set<string>,
+): {
+  stagnasjon: boolean;
+  justering: 'øk' | 'reduser' | null;
+  strength: 'low' | 'medium' | 'high' | null;
+  data: ProgresjonResultat['stagnasjonData'];
+} {
+  const ingenData = { stagnasjon: false, justering: null, strength: null, data: null };
+
+  if (sisteUnike5.length < 5) return ingenData;
+
+  // Hard guard: smerte > 3 i noen av siste 3 sesjoner → failsafe/regresjon håndterer dette
+  const siste3 = sisteUnike5.slice(0, 3).flat();
+  const maxSmerte = Math.max(0, ...siste3.map((l: any) => l.smerte ?? 0));
+  if (maxSmerte > 3) return ingenData;
+
+  const nyligeLogger  = filterGatekeeperLogger(sisteUnike5.slice(0, 2).flat(), gkIds);
+  const tidligeLogger = filterGatekeeperLogger(sisteUnike5.slice(2, 5).flat(), gkIds);
+
+  if (nyligeLogger.length < 2 || tidligeLogger.length < 2) return ingenData;
+
+  // contact_reps
+  const nyligeReps  = snittVerdi(nyligeLogger, 'contact_reps');
+  const tidligeReps = snittVerdi(tidligeLogger, 'contact_reps');
+  const repsTracked = nyligeReps !== null && tidligeReps !== null;
+  const repsBedret  = repsTracked && nyligeReps > tidligeReps * 1.05;
+
+  // side_diff (lavt er bedre)
+  const nyligeSide  = snittVerdi(nyligeLogger, 'side_diff');
+  const tidligeSide = snittVerdi(tidligeLogger, 'side_diff');
+  const sideTracked = nyligeSide !== null && tidligeSide !== null;
+  const sideBedret  = sideTracked && nyligeSide < tidligeSide * 0.95;
+
+  if (!repsTracked && !sideTracked) return ingenData;
+
+  // Evaluer kun trackede metrics
+  const trackedMetrics: boolean[] = [];
+  if (repsTracked) trackedMetrics.push(repsBedret);
+  if (sideTracked) trackedMetrics.push(sideBedret);
+  const stagnert = trackedMetrics.length > 0 && trackedMetrics.every(v => v === false);
+  if (!stagnert) return ingenData;
+
+  // RPE-justering
+  const avgRpe = snittVerdi(nyligeLogger, 'rpe');
+  const justering: 'øk' | 'reduser' | null =
+    avgRpe !== null && avgRpe < 3.5 ? 'øk' :
+    avgRpe !== null && avgRpe > 6.5 ? 'reduser' : null;
+
+  // Strength: basert på antall flate metrics
+  const contact_repsStatus = !repsTracked ? 'not_tracked' : repsBedret ? 'improving' : 'flat';
+  const side_diffStatus    = !sideTracked ? 'not_tracked' : sideBedret ? 'improving' : 'flat';
+  const flatCount = [contact_repsStatus, side_diffStatus].filter(s => s === 'flat').length;
+  const strength: 'low' | 'medium' | 'high' =
+    flatCount >= 2 ? 'high' : flatCount === 1 ? 'medium' : 'low';
+
+  return {
+    stagnasjon: true,
+    justering,
+    strength,
+    data: { contact_reps: contact_repsStatus, side_diff: side_diffStatus, rpe: avgRpe },
+  };
+}
 
 function erGatekeeper(o: any): boolean {
   if (o.gatekeeperOverride === true) return true;
@@ -127,6 +234,8 @@ export function vurderProgresjon(
   const tom: ProgresjonResultat = {
     klar: false, snartKlar: false, tidligProgresjon: false,
     rpeSignal: null, failsafe: false, akt, årsak: 'for tidlig',
+    regresjon: false, regresjonArsak: null,
+    stagnasjon: false, stagnasjonJustering: null, stagnasjonStrength: null, stagnasjonData: null,
   };
 
   // Fullførte logger for dette programmet, nyeste først
@@ -144,7 +253,8 @@ export function vurderProgresjon(
     if (!dagMap.has(nøkkel)) dagMap.set(nøkkel, []);
     dagMap.get(nøkkel)!.push(l);
   }
-  const sisteUnike = Array.from(dagMap.values()).slice(0, 3);
+  const alleUnike = Array.from(dagMap.values());
+  const sisteUnike = alleUnike.slice(0, 5); // 5 dager for stagnasjon
 
   if (sisteUnike.length < 2) {
     return { ...tom, failsafe, årsak: 'for få treningsdager' };
@@ -162,7 +272,7 @@ export function vurderProgresjon(
     if (o.tracking_type) trackingTyper.add(o.tracking_type);
   });
 
-  const programLogger = filterGatekeeperLogger(sisteUnike.flat(), gkIds);
+  const programLogger = filterGatekeeperLogger(sisteUnike.slice(0, 3).flat(), gkIds);
 
   // RPE-signal (justeringssignal – ikke progresjonskrav)
   const avgRpe = snittVerdi(programLogger, 'rpe');
@@ -193,13 +303,47 @@ export function vurderProgresjon(
       mobilitet !== null && mobilitet >= 5 && mobilitet < 7;
   }
 
+  // Regresjon
+  const regResult = regresjonSjekk(sisteUnike, gkIds, program);
+  if (regResult.regresjon) {
+    return {
+      klar: false, snartKlar: false, tidligProgresjon: false,
+      rpeSignal, failsafe: false, akt,
+      årsak: `regresjon (${regResult.arsak})`,
+      regresjon: true, regresjonArsak: regResult.arsak,
+      stagnasjon: false, stagnasjonJustering: null, stagnasjonStrength: null, stagnasjonData: null,
+    };
+  }
+
+  // Failsafe (etter regresjon-sjekk)
+  if (failsafe) {
+    return {
+      klar: false, snartKlar: false, tidligProgresjon: false,
+      rpeSignal, failsafe: true, akt, årsak: 'failsafe – smerte ≥ 4',
+      regresjon: false, regresjonArsak: null,
+      stagnasjon: false, stagnasjonJustering: null, stagnasjonStrength: null, stagnasjonData: null,
+    };
+  }
+
+  // Stagnasjon
+  const stagResult = stagnasjonSjekk(sisteUnike, gkIds);
+
   const årsak = klar
     ? 'alle kriterier nådd (≥40% fullført)'
     : tidligProgresjon
       ? 'kriterier nådd tidlig (siste 3 treningsdager)'
       : snartKlar
         ? 'nesten klar – akt 1'
-        : 'ikke alle kriterier nådd';
+        : stagResult.stagnasjon
+          ? 'stagnasjon detektert'
+          : 'ikke alle kriterier nådd';
 
-  return { klar, snartKlar, tidligProgresjon, rpeSignal, failsafe, akt, årsak };
+  return {
+    klar, snartKlar, tidligProgresjon, rpeSignal, failsafe: false, akt, årsak,
+    regresjon: false, regresjonArsak: null,
+    stagnasjon: stagResult.stagnasjon,
+    stagnasjonJustering: stagResult.justering,
+    stagnasjonStrength: stagResult.strength,
+    stagnasjonData: stagResult.data,
+  };
 }
